@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import requests
+import time
 
 # Add backend root to path so ml.model can be imported
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -36,9 +38,58 @@ print("Building opponent defense rankings...")
 _opp_defense = _build_opp_defense_table(_weekly)
 print("Defense table ready.")
 
+# ── ESPN injury cache (avoid hammering the API) ────────────────────────────────
+_injury_cache: dict = {}   # name -> (status, timestamp)
+_CACHE_TTL = 1800          # 30 minutes
+
+
+def get_espn_injury(player_name: str) -> str:
+    """
+    Fetch real-time injury status from ESPN's public API.
+    Returns e.g. 'Healthy', 'Questionable', 'Doubtful', 'Out', 'IR'
+    """
+    now = time.time()
+    cached = _injury_cache.get(player_name.lower())
+    if cached and (now - cached[1]) < _CACHE_TTL:
+        return cached[0]
+
+    try:
+        resp = requests.get(
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/athletes",
+            params={"search": player_name, "limit": 3},
+            timeout=4,
+        )
+        data = resp.json()
+        athletes = data.get("items", []) or data.get("athletes", [])
+
+        # Find the closest name match
+        name_lower = player_name.lower()
+        for athlete in athletes:
+            full = athlete.get("fullName", "").lower()
+            if not full:
+                # Some responses nest under displayName
+                full = athlete.get("displayName", "").lower()
+            if name_lower in full or full in name_lower:
+                injuries = athlete.get("injuries", [])
+                if injuries:
+                    status = injuries[0].get("status", "").strip()
+                    if status:
+                        _injury_cache[player_name.lower()] = (status, now)
+                        return status
+                # No injuries array = healthy
+                _injury_cache[player_name.lower()] = ("Healthy", now)
+                return "Healthy"
+
+        # No match found
+        _injury_cache[player_name.lower()] = ("Healthy", now)
+        return "Healthy"
+
+    except Exception:
+        return "—"
+
 
 def get_player_stats(player_name: str) -> dict:
-    """Returns ML-powered projection with SHAP factors for a player."""
+    """Returns ML-powered projection with SHAP factors and ESPN injury status."""
     name = player_name.lower().strip()
     all_games = _weekly[_weekly["player_display_name"].str.contains(name, na=False)].copy()
 
@@ -76,7 +127,6 @@ def get_player_stats(player_name: str) -> dict:
         conf_color = ml_result["confidence_color"]
         factors    = ml_result["factors"]
     else:
-        # Fallback to rolling average if position not in model (K, DST, etc.)
         fp_vals    = recent["fp"].values
         proj       = round(float(np.mean(fp_vals)), 1)
         floor      = round(float(np.min(fp_vals)), 1)
@@ -87,11 +137,11 @@ def get_player_stats(player_name: str) -> dict:
         conf_color = "#22c55e" if confidence == "HIGH" else "#fbbf24" if confidence == "MEDIUM" else "#ef4444"
         factors    = []
 
-    # ── Trend: ML projection vs season average ────────────────────────────────
+    # ── Trend ─────────────────────────────────────────────────────────────────
     season_avg = float(season_games["fp"].mean()) if len(season_games) >= 4 else proj
     trend      = round(proj - season_avg, 1)
 
-    # ── Recent games with opponent info ───────────────────────────────────────
+    # ── Recent games ──────────────────────────────────────────────────────────
     game_cols = ["week", "fp"]
     if "opponent_team" in recent.columns:
         game_cols.append("opponent_team")
@@ -109,6 +159,9 @@ def get_player_stats(player_name: str) -> dict:
     else:
         sample_desc = f"Wks {int(recent['week'].min())}–{int(recent['week'].max())}, {latest_season}"
 
+    # ── ESPN real-time injury status ───────────────────────────────────────────
+    injury_status = get_espn_injury(full_name)
+
     return {
         "found":            True,
         "player":           full_name,
@@ -124,6 +177,7 @@ def get_player_stats(player_name: str) -> dict:
         "recent_games":     recent_games,
         "games_sampled":    len(recent),
         "sample_weeks":     sample_desc,
+        "injury_status":    injury_status,   # ← real ESPN data
     }
 
 

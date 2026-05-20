@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 const API = window.location.port === "5173"
   ? `${window.location.protocol}//${window.location.hostname}:8000`
   : `${window.location.protocol}//${window.location.hostname}/api`;
+
 function SimpleMarkdown({ text }) {
   const lines = text.split("\n");
   return (
@@ -34,22 +35,51 @@ function renderInline(text) {
   );
 }
 
-const DEFAULT_PLAYERS = [
-  { name: "Josh Allen", pos: "QB", proj: 0, trend: 0, injury: "Healthy", matchup: "A", news: "buy", salary: 8200 },
-  { name: "CeeDee Lamb", pos: "WR", proj: 0, trend: 0, injury: "Healthy", matchup: "A+", news: "buy", salary: 8000 },
-  { name: "Christian McCaffrey", pos: "RB", proj: 0, trend: 0, injury: "Questionable", matchup: "B+", news: "hold", salary: 9200 },
-  { name: "Amon-Ra St. Brown", pos: "WR", proj: 0, trend: 0, injury: "Healthy", matchup: "B", news: "buy", salary: 7100 },
-  { name: "Travis Kelce", pos: "TE", proj: 0, trend: 0, injury: "Healthy", matchup: "A-", news: "hold", salary: 6900 },
-  { name: "Tyreek Hill", pos: "WR", proj: 0, trend: 0, injury: "Limited", matchup: "C+", news: "sell", salary: 7400 },
-  { name: "Breece Hall", pos: "RB", proj: 0, trend: 0, injury: "Healthy", matchup: "B+", news: "buy", salary: 7000 },
-  { name: "Sam LaPorta", pos: "TE", proj: 0, trend: 0, injury: "Healthy", matchup: "B-", news: "hold", salary: 5200 },
+// Minimal seed roster — only name and position, everything else loads from backend
+const SEED_ROSTER = [
+  { name: "Josh Allen",           pos: "QB" },
+  { name: "CeeDee Lamb",          pos: "WR" },
+  { name: "Christian McCaffrey",  pos: "RB" },
+  { name: "Amon-Ra St. Brown",    pos: "WR" },
+  { name: "Travis Kelce",         pos: "TE" },
+  { name: "Tyreek Hill",          pos: "WR" },
+  { name: "Breece Hall",          pos: "RB" },
+  { name: "Sam LaPorta",          pos: "TE" },
+  { name: "Drake Maye",           pos: "QB" },
 ];
 
-const matchupColors = { "A+": "#22c55e", "A": "#4ade80", "A-": "#86efac", "B+": "#fbbf24", "B": "#fcd34d", "B-": "#fde68a", "C+": "#f97316", "C": "#fb923c" };
+function defaultPlayer(name, pos) {
+  return {
+    name,
+    pos,
+    proj: null,
+    trend: 0,
+    injury: "—",
+    news: "hold",
+    // no salary — it's fake
+  };
+}
+
+// Derive injury label from news articles
+function deriveInjury(newsArticles) {
+  if (!newsArticles || newsArticles.length === 0) return "—";
+  const INJURY_KEYWORDS = ["limited", "questionable", "doubtful", "out", "ir", "injured", "day-to-day", "scratch"];
+  const allText = newsArticles.map(a => (a.title || "").toLowerCase()).join(" ");
+  for (const kw of INJURY_KEYWORDS) {
+    if (allText.includes(kw)) return kw.charAt(0).toUpperCase() + kw.slice(1);
+  }
+  return "Healthy";
+}
+
 const newsColors = { buy: "#22c55e", hold: "#fbbf24", sell: "#ef4444" };
 const newsLabels = { buy: "↑ Buy", hold: "→ Hold", sell: "↓ Sell" };
 
-
+function injuryColor(injury) {
+  if (!injury || injury === "—") return "#475569";
+  if (injury === "Healthy") return "#22c55e";
+  if (["Out", "Ir", "Doubtful"].includes(injury)) return "#ef4444";
+  return "#fbbf24";
+}
 
 function DropModal({ player, onConfirm, onCancel }) {
   return (
@@ -71,19 +101,22 @@ export default function App() {
   const savedRoster = (() => {
     try {
       const s = localStorage.getItem("blitz_roster");
-      return s ? JSON.parse(s) : DEFAULT_PLAYERS;
-    } catch { return DEFAULT_PLAYERS; }
+      if (s) {
+        const parsed = JSON.parse(s);
+        // Strip old hardcoded fields on load
+        return parsed.map(p => ({ name: p.name, pos: p.pos, proj: p.proj ?? null, trend: p.trend ?? 0, injury: p.injury_status ?? p.injury ?? "—", news: p.news ?? "hold" }));
+      }
+      return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos));
+    } catch { return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos)); }
   })();
 
   const [roster, setRoster] = useState(savedRoster);
-  const [selected, setSelected] = useState(savedRoster[0] || DEFAULT_PLAYERS[0]);
+  const [selected, setSelected] = useState(savedRoster[0]);
   const [tab, setTab] = useState("roster");
 
-  // News state
   const [playerNews, setPlayerNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
 
-  // Waiver wire state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -92,19 +125,17 @@ export default function App() {
   const [dropConfirm, setDropConfirm] = useState(null);
   const searchTimeout = useRef(null);
 
-  // Chat state
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState([
     { role: "ai", text: "Hey! I'm Blitz, your Fantasy AI. Ask me to analyze players, optimize your lineup, or evaluate trades." }
   ]);
   const [loading, setLoading] = useState(false);
 
-  // Persist roster to localStorage whenever it changes
   useEffect(() => {
     try { localStorage.setItem("blitz_roster", JSON.stringify(roster)); } catch {}
   }, [roster]);
 
-  // Fetch real projections from backend on load
+  // Fetch projections for all roster players
   useEffect(() => {
     roster.forEach(async (p) => {
       try {
@@ -116,10 +147,11 @@ export default function App() {
               ...r,
               proj: data.projected_points,
               sampleWeeks: data.sample_weeks,
-              trend: data.trend ?? r.trend,
-              confidence: data.confidence ?? r.confidence,
+              trend: data.trend ?? 0,
+              confidence: data.confidence,
               confidenceColor: data.confidence_color ?? "#22c55e",
-              factors: data.factors ?? r.factors,
+              factors: data.factors ?? [],
+              injury: data.injury_status ?? "—",
             } : r
           ));
           setSelected(prev =>
@@ -127,10 +159,11 @@ export default function App() {
               ...prev,
               proj: data.projected_points,
               sampleWeeks: data.sample_weeks,
-              trend: data.trend ?? prev.trend,
-              confidence: data.confidence ?? prev.confidence,
+              trend: data.trend ?? 0,
+              confidence: data.confidence,
               confidenceColor: data.confidence_color ?? "#22c55e",
-              factors: data.factors ?? prev.factors,
+              factors: data.factors ?? [],
+              injury: data.injury_status ?? "—",
             } : prev
           );
         }
@@ -138,17 +171,25 @@ export default function App() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch real news when selected player changes
+  // Fetch news + derive injury status dynamically
   useEffect(() => {
     setPlayerNews([]);
     setNewsLoading(true);
     fetch(`${API}/news/${encodeURIComponent(selected.name)}`)
       .then(r => r.json())
-      .then(data => { setPlayerNews(Array.isArray(data) ? data : []); setNewsLoading(false); })
+      .then(data => {
+        const articles = Array.isArray(data) ? data : [];
+        setPlayerNews(articles);
+        setNewsLoading(false);
+        // Derive news signal from live articles
+        const signals = articles.map(a => a.signal);
+        const news = signals.includes("sell") ? "sell" : signals.includes("buy") ? "buy" : "hold";
+        setRoster(prev => prev.map(r => r.name === selected.name ? { ...r, news } : r));
+        setSelected(prev => prev.name === selected.name ? { ...prev, news } : prev);
+      })
       .catch(() => { setPlayerNews([]); setNewsLoading(false); });
   }, [selected.name]);
 
-  // Search players via backend
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     if (!searchQuery || searchQuery.length < 2) { setSearchResults([]); return; }
@@ -168,16 +209,8 @@ export default function App() {
 
   const confirmAdd = () => {
     if (!addingPlayer) return;
-    const newPlayer = {
-      name: addingPlayer.player,
-      pos: addingPlayer.position || "WR",
-      proj: addingPlayer.projected_points || 10,
-      trend: 0,
-      injury: "Healthy",
-      matchup: "B",
-      news: "hold",
-      salary: 5000,
-    };
+    const newPlayer = defaultPlayer(addingPlayer.player, addingPlayer.position || "WR");
+    newPlayer.proj = addingPlayer.projected_points ?? null;
     if (dropTarget) {
       setRoster(r => r.map(p => p.name === dropTarget.name ? newPlayer : p));
     } else {
@@ -195,7 +228,7 @@ export default function App() {
     if (!dropConfirm) return;
     const remaining = roster.filter(p => p.name !== dropConfirm.name);
     setRoster(remaining);
-    if (selected.name === dropConfirm.name) setSelected(remaining[0] || DEFAULT_PLAYERS[0]);
+    if (selected.name === dropConfirm.name) setSelected(remaining[0] || defaultPlayer("", ""));
     setDropConfirm(null);
   };
 
@@ -207,20 +240,14 @@ export default function App() {
     setChatInput("");
     setMessages(m => [...m, { role: "user", text: userMsg }]);
     setLoading(true);
-
-    const fullMsg = `My current roster: ${roster.map(p => `${p.name} (${p.pos}, proj: ${p.proj}pts)`).join(", ")}\n\nUser question: ${userMsg}`;
-
+    const fullMsg = `My current roster: ${roster.map(p => `${p.name} (${p.pos}, proj: ${p.proj ?? "loading"}pts)`).join(", ")}\n\nUser question: ${userMsg}`;
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: fullMsg,
-          history: apiHistoryRef.current,
-        }),
+        body: JSON.stringify({ message: fullMsg, history: apiHistoryRef.current }),
       });
       const data = await res.json();
-      // Update API history with the clean user message and AI response
       apiHistoryRef.current = [
         ...apiHistoryRef.current,
         { role: "user", content: fullMsg },
@@ -228,7 +255,7 @@ export default function App() {
       ];
       setMessages(m => [...m, { role: "ai", text: data.response }]);
     } catch {
-      setMessages(m => [...m, { role: "ai", text: "⚠️ Could not reach backend. Make sure uvicorn is running on port 8000." }]);
+      setMessages(m => [...m, { role: "ai", text: "⚠️ Could not reach backend." }]);
     }
     setLoading(false);
   };
@@ -267,7 +294,7 @@ export default function App() {
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 6, cursor: "pointer", marginBottom: 4, background: dropTarget?.name === p.name ? "#1a2f4a" : "transparent", border: `1px solid ${dropTarget?.name === p.name ? "#0ea5e9" : "transparent"}`, transition: "all 0.15s" }}>
                   <div style={{ background: "#0f1f38", border: "1px solid #1e3a5f", borderRadius: 3, padding: "2px 7px", fontSize: 10, color: "#38bdf8", minWidth: 28, textAlign: "center" }}>{p.pos}</div>
                   <div style={{ flex: 1, fontSize: 12, color: "#e2e8f0" }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: "#fbbf24" }}>{p.proj} pts</div>
+                  <div style={{ fontSize: 11, color: "#fbbf24" }}>{p.proj ?? "—"} pts</div>
                   {dropTarget?.name === p.name && <div style={{ fontSize: 10, color: "#ef4444" }}>DROP</div>}
                 </div>
               ))}
@@ -313,12 +340,12 @@ export default function App() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: selected.name === p.name ? "#e2e8f0" : "#94a3b8" }}>{p.name}</div>
                   <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
-                    Proj: <span style={{ color: "#fbbf24" }}>{p.proj}</span>
+                    Proj: <span style={{ color: "#fbbf24" }}>{p.proj ?? "..."}</span>
                     <span style={{ color: p.trend >= 0 ? "#22c55e" : "#ef4444", marginLeft: 8 }}>{p.trend >= 0 ? "+" : ""}{p.trend}</span>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.injury === "Healthy" ? "#22c55e" : p.injury === "Limited" ? "#fbbf24" : "#ef4444" }} className={p.injury !== "Healthy" ? "pulse" : ""} />
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: injuryColor(p.injury) }} className={p.injury && p.injury !== "Healthy" && p.injury !== "—" ? "pulse" : ""} />
                   <button onClick={e => { e.stopPropagation(); setDropConfirm(p); }}
                     style={{ background: "transparent", border: "1px solid #1e3a5f", color: "#475569", padding: "2px 7px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "inherit", letterSpacing: 1 }}>DROP</button>
                 </div>
@@ -331,27 +358,31 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 28 }}>
               <div>
                 <div style={{ fontSize: 26, fontWeight: 700, color: "#f1f5f9", letterSpacing: -1 }}>{selected.name}</div>
-                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
                   <span style={{ background: "#0f1f38", border: "1px solid #1e3a5f", color: "#38bdf8", padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.pos}</span>
-                  <span style={{ background: "#0f1f38", border: `1px solid ${selected.injury === "Healthy" ? "#22c55e" : "#fbbf24"}`, color: selected.injury === "Healthy" ? "#22c55e" : "#fbbf24", padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.injury}</span>
-                  <span style={{ background: "#0f1f38", border: `1px solid ${newsColors[selected.news]}`, color: newsColors[selected.news], padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{newsLabels[selected.news]}</span>
+                  {selected.injury && selected.injury !== "—" && (
+                    <span style={{ background: "#0f1f38", border: `1px solid ${injuryColor(selected.injury)}`, color: injuryColor(selected.injury), padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.injury}</span>
+                  )}
+                  <span style={{ background: "#0f1f38", border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{newsLabels[selected.news || "hold"]}</span>
                 </div>
               </div>
               <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div style={{ fontSize: 42, fontWeight: 700, color: "#38bdf8", letterSpacing: -2 }}>{selected.proj}</div>
+                <div style={{ fontSize: 42, fontWeight: 700, color: "#38bdf8", letterSpacing: -2 }}>{selected.proj ?? "—"}</div>
                 <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>PROJECTED PTS</div>
-                <div style={{ fontSize: 12, color: selected.trend >= 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
-                  {selected.trend >= 0 ? "▲" : "▼"} {Math.abs(selected.trend)} vs season avg
-                </div>
+                {selected.proj && (
+                  <div style={{ fontSize: 12, color: selected.trend >= 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
+                    {selected.trend >= 0 ? "▲" : "▼"} {Math.abs(selected.trend)} vs season avg
+                  </div>
+                )}
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
               {[
-                { label: "BASED ON", value: selected.sampleWeeks || "2025 season", color: "#94a3b8" },
-                { label: "DFS SALARY", value: `$${selected.salary?.toLocaleString() || "N/A"}`, color: "#e2e8f0" },
+                { label: "BASED ON", value: selected.sampleWeeks || "Loading...", color: "#94a3b8" },
                 { label: "CONFIDENCE", value: selected.confidence || "—", color: selected.confidenceColor || "#94a3b8" },
-                { label: "FLOOR / CEILING", value: `${(selected.proj - 5).toFixed(1)} / ${(selected.proj + 9).toFixed(1)}`, color: "#94a3b8" },
+                { label: "FLOOR", value: selected.proj ? (selected.proj - 5).toFixed(1) : "—", color: "#94a3b8" },
+                { label: "CEILING", value: selected.proj ? (selected.proj + 9).toFixed(1) : "—", color: "#94a3b8" },
               ].map(stat => (
                 <div key={stat.label} style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 8, padding: 16 }} className="glow">
                   <div style={{ fontSize: 9, letterSpacing: 2, color: "#475569", marginBottom: 6 }}>{stat.label}</div>
@@ -360,41 +391,33 @@ export default function App() {
               ))}
             </div>
 
-            <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 8, padding: 20, marginBottom: 20 }}>
-              <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 16 }}>PROJECTION FACTORS</div>
-              {(selected.factors || []).length === 0 && (
-                <div style={{ fontSize: 11, color: "#475569" }}>Loading factors...</div>
-              )}
-              {(selected.factors || []).map(s => {
-                const maxImpact = Math.max(...(selected.factors || []).map(f => Math.abs(f.impact)), 1);
-                return (
-                  <div key={s.factor} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: "#94a3b8", width: 180, flexShrink: 0 }}>{s.factor}</div>
-                    <div style={{ flex: 1, height: 6, background: "#1e3a5f", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.abs(s.impact) / maxImpact * 100}%`, background: s.impact >= 0 ? "#22c55e" : "#ef4444", borderRadius: 3 }} />
+            {(selected.factors || []).length > 0 && (
+              <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 8, padding: 20, marginBottom: 20 }}>
+                <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 16 }}>PROJECTION FACTORS</div>
+                {(selected.factors || []).map(s => {
+                  const maxImpact = Math.max(...(selected.factors || []).map(f => Math.abs(f.impact)), 1);
+                  return (
+                    <div key={s.factor} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: "#94a3b8", width: 180, flexShrink: 0 }}>{s.factor}</div>
+                      <div style={{ flex: 1, height: 6, background: "#1e3a5f", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.abs(s.impact) / maxImpact * 100}%`, background: s.impact >= 0 ? "#22c55e" : "#ef4444", borderRadius: 3 }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: s.impact >= 0 ? "#22c55e" : "#ef4444", width: 44, textAlign: "right" }}>{s.impact >= 0 ? "+" : ""}{s.impact}</div>
                     </div>
-                    <div style={{ fontSize: 11, color: s.impact >= 0 ? "#22c55e" : "#ef4444", width: 44, textAlign: "right" }}>{s.impact >= 0 ? "+" : ""}{s.impact}</div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
-            {/* Real news section */}
             <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 16 }}>RECENT NEWS & SIGNALS</div>
-              {newsLoading && (
-                <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>Loading news...</div>
-              )}
+              {newsLoading && <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>Loading news...</div>}
               {!newsLoading && playerNews.length === 0 && (
                 <div style={{ fontSize: 11, color: "#475569" }}>No recent news found for {selected.name}.</div>
               )}
               {!newsLoading && playerNews.map((n, i) => {
-                const hoursAgo = n.publishedAt
-                  ? Math.round((Date.now() - new Date(n.publishedAt)) / 3600000)
-                  : null;
-                const timeAgo = hoursAgo !== null
-                  ? hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago`
-                  : "";
+                const hoursAgo = n.publishedAt ? Math.round((Date.now() - new Date(n.publishedAt)) / 3600000) : null;
+                const timeAgo = hoursAgo !== null ? hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago` : "";
                 return (
                   <div key={i} style={{ borderLeft: `2px solid ${newsColors[n.signal]}`, paddingLeft: 14, marginBottom: 14 }}>
                     <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
@@ -428,7 +451,6 @@ export default function App() {
               autoFocus />
             {searching && <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#38bdf8", letterSpacing: 1 }}>SEARCHING...</div>}
           </div>
-
           {searchResults.length > 0 && (
             <div className="slide-in">
               <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 12 }}>{searchResults.length} PLAYERS FOUND</div>
@@ -456,7 +478,6 @@ export default function App() {
               </div>
             </div>
           )}
-
           {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
             <div style={{ textAlign: "center", padding: 40, color: "#475569", fontSize: 12 }}>No players found for "{searchQuery}".</div>
           )}
@@ -464,7 +485,7 @@ export default function App() {
             <div style={{ textAlign: "center", padding: 60 }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>🏈</div>
               <div style={{ fontSize: 12, color: "#475569" }}>Type a player name to search the waiver wire</div>
-              <div style={{ fontSize: 10, color: "#2d4a6a", marginTop: 8 }}>Powered by real 2023-2024 NFL stats</div>
+              <div style={{ fontSize: 10, color: "#2d4a6a", marginTop: 8 }}>Powered by real 2024-2025 NFL stats</div>
             </div>
           )}
         </div>
@@ -472,31 +493,28 @@ export default function App() {
 
       {/* ── LINEUP TAB ── */}
       {tab === "lineup" && (
-        <div style={{ padding: 28, maxWidth: 700, margin: "0 auto" }}>
-          <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 24 }}>OPTIMAL LINEUP — WEEK 11 — HALF PPR</div>
-          {[
-            { slot: "QB", player: "Josh Allen", pts: 28.4, trend: "↑" },
-            { slot: "RB1", player: "Breece Hall", pts: 17.8, trend: "↑" },
-            { slot: "RB2", player: "Christian McCaffrey", pts: 23.5, trend: "→", note: "⚠️ Monitor" },
-            { slot: "WR1", player: "CeeDee Lamb", pts: 22.1, trend: "↑" },
-            { slot: "WR2", player: "Amon-Ra St. Brown", pts: 18.6, trend: "↑" },
-            { slot: "TE", player: "Travis Kelce", pts: 16.2, trend: "→" },
-            { slot: "FLEX", player: "Breece Hall", pts: 17.8, trend: "↑" },
-            { slot: "K", player: "Harrison Butker", pts: 8.2, trend: "→" },
-            { slot: "DST", player: "San Francisco 49ers", pts: 9.4, trend: "↑" },
-          ].map((row, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, marginBottom: 8 }}>
-              <div style={{ width: 44, fontSize: 10, color: "#475569", letterSpacing: 1 }}>{row.slot}</div>
-              <div style={{ flex: 1, fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{row.player}</div>
-              {row.note && <div style={{ fontSize: 10, color: "#fbbf24" }}>{row.note}</div>}
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#38bdf8" }}>{row.pts}</div>
-              <div style={{ fontSize: 14, color: row.trend === "↑" ? "#22c55e" : row.trend === "↓" ? "#ef4444" : "#fbbf24" }}>{row.trend}</div>
-            </div>
-          ))}
-          <div style={{ marginTop: 16, padding: "16px 20px", background: "#0f1f38", border: "1px solid #0ea5e9", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "#64748b", letterSpacing: 1 }}>TOTAL PROJECTED</span>
-            <span style={{ fontSize: 28, fontWeight: 700, color: "#38bdf8" }}>162.0 pts</span>
-          </div>
+        <div style={{ padding: 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100vh - 57px)" }}>
+          <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 24 }}>OPTIMAL LINEUP — HALF PPR</div>
+          {roster.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 60, color: "#475569" }}>Add players to your roster to see lineup suggestions.</div>
+          ) : (
+            <>
+              {roster.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ width: 44, fontSize: 10, color: "#475569", letterSpacing: 1 }}>{p.pos}</div>
+                  <div style={{ flex: 1, fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{p.name}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#38bdf8" }}>{p.proj ?? "—"}</div>
+                  <div style={{ fontSize: 14, color: p.trend >= 0 ? "#22c55e" : "#ef4444" }}>{p.trend >= 0 ? "↑" : "↓"}</div>
+                </div>
+              ))}
+              <div style={{ marginTop: 16, padding: "16px 20px", background: "#0f1f38", border: "1px solid #0ea5e9", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#64748b", letterSpacing: 1 }}>TOTAL PROJECTED</span>
+                <span style={{ fontSize: 28, fontWeight: 700, color: "#38bdf8" }}>
+                  {roster.reduce((sum, p) => sum + (p.proj ?? 0), 0).toFixed(1)} pts
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
