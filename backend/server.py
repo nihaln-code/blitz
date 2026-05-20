@@ -1,20 +1,24 @@
 """
 server.py - FastAPI server exposing the fantasy agent as a REST API
-Run with: uvicorn server:app --reload --port 8000
+Local dev: uvicorn server:app --reload --port 8000
+HuggingFace: uvicorn server:app --host 0.0.0.0 --port 7860
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from agents.fantasy_agent import build_fantasy_agent, run_agent
 from langchain_core.messages import HumanMessage, AIMessage
 from data.stats import get_player_stats, search_players
 import requests as http_requests
+import os
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://192.168.1.186:5173", "http://blitz.nimmagadda.com:5173","http://blitzfantasy.duckdns.org"],
+    allow_origins=["*"],  # Covers HuggingFace + all local dev origins
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -22,6 +26,10 @@ app.add_middleware(
 print("Building fantasy agent...")
 agent = build_fantasy_agent()
 print("Agent ready.")
+
+
+# ── API Router with /api prefix (used by frontend on HuggingFace) ───────────
+api_router = APIRouter(prefix="/api")
 
 
 class ChatRequest(BaseModel):
@@ -33,7 +41,7 @@ class ChatResponse(BaseModel):
     response: str
 
 
-@app.post("/chat", response_model=ChatResponse)
+@api_router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     history = []
     for msg in req.history:
@@ -45,19 +53,19 @@ async def chat(req: ChatRequest):
     return ChatResponse(response=response)
 
 
-@app.get("/search")
+@api_router.get("/search")
 async def search(q: str):
     if not q or len(q) < 2:
         return []
     return search_players(q)
 
 
-@app.get("/player/{name}")
+@api_router.get("/player/{name}")
 async def player(name: str):
     return get_player_stats(name)
 
 
-@app.get("/news/{player_name}")
+@api_router.get("/news/{player_name}")
 async def get_news(player_name: str):
     from utils.config import get_settings
     settings = get_settings()
@@ -107,6 +115,21 @@ async def get_news(player_name: str):
         return []
 
 
-@app.get("/health")
+@api_router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# Also keep routes without /api prefix for local dev (port 8000)
+app.include_router(api_router)
+app.include_router(APIRouter(routes=api_router.routes))  # mounts at root too
+
+
+# ── Serve React frontend (must be LAST) ─────────────────────────────────────
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/assets", StaticFiles(directory=f"{static_dir}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        return FileResponse(f"{static_dir}/index.html")
