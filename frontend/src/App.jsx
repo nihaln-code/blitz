@@ -3,6 +3,16 @@ const API = window.location.port === "5173"
   ? `${window.location.protocol}//${window.location.hostname}:8000`
   : `${window.location.protocol}//${window.location.hostname}/api`;
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
 function SimpleMarkdown({ text }) {
   const lines = text.split("\n");
   return (
@@ -84,7 +94,7 @@ function injuryColor(injury) {
 function DropModal({ player, onConfirm, onCancel }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-      <div style={{ background: "#0a1628", border: "1px solid #ef4444", borderRadius: 12, padding: 28, width: 340, textAlign: "center" }}>
+      <div style={{ background: "#0a1628", border: "1px solid #ef4444", borderRadius: 12, padding: 28, width: "min(340px, 90vw)", textAlign: "center" }}>
         <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 }}>Drop {player.name}?</div>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 24 }}>This will remove them from your roster permanently.</div>
@@ -110,9 +120,11 @@ export default function App() {
     } catch { return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos)); }
   })();
 
+  const isMobile = useIsMobile();
   const [roster, setRoster] = useState(savedRoster);
   const [selected, setSelected] = useState(savedRoster[0]);
   const [tab, setTab] = useState("roster");
+  const [showDetail, setShowDetail] = useState(false); // mobile: toggle between list and detail
 
   const [playerNews, setPlayerNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -152,6 +164,8 @@ export default function App() {
               confidenceColor: data.confidence_color ?? "#22c55e",
               factors: data.factors ?? [],
               injury: data.injury_status ?? "—",
+              floor: data.floor ?? null,
+              ceiling: data.ceiling ?? null,
             } : r
           ));
           setSelected(prev =>
@@ -164,6 +178,8 @@ export default function App() {
               confidenceColor: data.confidence_color ?? "#22c55e",
               factors: data.factors ?? [],
               injury: data.injury_status ?? "—",
+              floor: data.floor ?? null,
+              ceiling: data.ceiling ?? null,
             } : prev
           );
         }
@@ -266,6 +282,9 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+        @media (max-width: 767px) {
+          html, body, #root { height: 100dvh; }
+        }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0a0f1e; } ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
         .glow { box-shadow: 0 0 20px rgba(56,189,248,0.15); }
         .pulse { animation: pulse 2s infinite; }
@@ -281,7 +300,7 @@ export default function App() {
 
       {addingPlayer && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 12, padding: 28, width: 440 }} className="slide-in">
+          <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 12, padding: 28, width: "min(440px, 95vw)" }} className="slide-in">
             <div style={{ fontSize: 13, fontWeight: 700, color: "#38bdf8", letterSpacing: 2, marginBottom: 4 }}>ADD PLAYER</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", marginBottom: 4 }}>{addingPlayer.player}</div>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 20 }}>
@@ -310,15 +329,16 @@ export default function App() {
       )}
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e3a5f", padding: "14px 24px", display: "flex", alignItems: "center", gap: 16, background: "#050b18" }}>
-        <div style={{ fontSize: 22 }}>🏈</div>
-        <div>
+      <div style={{ borderBottom: "1px solid #1e3a5f", padding: isMobile ? "10px 14px" : "14px 24px", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, background: "#050b18", flexShrink: 0 }}>
+        <div style={{ fontSize: isMobile ? 18 : 22 }}>🏈</div>
+        {!isMobile && <div>
           <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: "#38bdf8" }}>BLITZ</div>
           <div style={{ fontSize: 10, color: "#475569", letterSpacing: 2 }}>FANTASY FOOTBALL OPTIMIZER</div>
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        </div>}
+        {isMobile && <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: "#38bdf8" }}>BLITZ</div>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 4 : 8 }}>
           {["roster", "waiver", "lineup", "chat"].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? "#0ea5e9" : "transparent", border: `1px solid ${tab === t ? "#0ea5e9" : "#1e3a5f"}`, color: tab === t ? "#fff" : "#64748b", padding: "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: 11, letterSpacing: 1, fontFamily: "inherit", textTransform: "uppercase" }}>
+            <button key={t} onClick={() => { setTab(t); setShowDetail(false); }} style={{ background: tab === t ? "#0ea5e9" : "transparent", border: `1px solid ${tab === t ? "#0ea5e9" : "#1e3a5f"}`, color: tab === t ? "#fff" : "#64748b", padding: isMobile ? "6px 10px" : "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: isMobile ? 10 : 11, letterSpacing: 1, fontFamily: "inherit", textTransform: "uppercase" }}>
               {t}
             </button>
           ))}
@@ -327,14 +347,14 @@ export default function App() {
 
       {/* ── ROSTER TAB ── */}
       {tab === "roster" && (
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", height: "calc(100vh - 57px)" }}>
-          <div style={{ borderRight: "1px solid #1e3a5f", overflowY: "auto", background: "#050b18" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", height: "calc(100dvh - 57px)", overflow: "hidden" }}>
+          <div style={{ borderRight: "1px solid #1e3a5f", overflowY: "auto", background: "#050b18", display: isMobile && showDetail ? "none" : "block" }}>
             <div style={{ padding: "12px 16px", fontSize: 10, letterSpacing: 2, color: "#475569", borderBottom: "1px solid #1e3a5f", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>ROSTER — {roster.length} PLAYERS</span>
               <button onClick={() => setTab("waiver")} style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "inherit", letterSpacing: 1 }}>+ ADD</button>
             </div>
             {roster.map(p => (
-              <div key={p.name} onClick={() => setSelected(p)} className="player-row"
+              <div key={p.name} onClick={() => { setSelected(p); if (isMobile) setShowDetail(true); }} className="player-row"
                 style={{ padding: "14px 16px", borderBottom: "1px solid #0f1f38", cursor: "pointer", background: selected.name === p.name ? "#0f1f38" : "transparent", transition: "background 0.15s", display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ background: "#0f1f38", border: "1px solid #1e3a5f", borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 700, color: "#38bdf8", minWidth: 32, textAlign: "center" }}>{p.pos}</div>
                 <div style={{ flex: 1 }}>
@@ -354,10 +374,11 @@ export default function App() {
           </div>
 
           {/* Player detail */}
-          <div style={{ padding: 28, overflowY: "auto" }}>
+          <div style={{ padding: isMobile ? 16 : 28, overflowY: "auto", display: isMobile && !showDetail ? "none" : "block" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 28 }}>
-              <div>
-                <div style={{ fontSize: 26, fontWeight: 700, color: "#f1f5f9", letterSpacing: -1 }}>{selected.name}</div>
+              <div style={{ flex: 1 }}>
+                {isMobile && <button onClick={() => setShowDetail(false)} style={{ background: "transparent", border: "none", color: "#38bdf8", fontSize: 11, fontFamily: "inherit", cursor: "pointer", letterSpacing: 1, marginBottom: 12, padding: 0 }}>← BACK TO ROSTER</button>}
+                <div style={{ fontSize: isMobile ? 20 : 26, fontWeight: 700, color: "#f1f5f9", letterSpacing: -1 }}>{selected.name}</div>
                 <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
                   <span style={{ background: "#0f1f38", border: "1px solid #1e3a5f", color: "#38bdf8", padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.pos}</span>
                   {selected.injury && selected.injury !== "—" && (
@@ -366,8 +387,8 @@ export default function App() {
                   <span style={{ background: "#0f1f38", border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{newsLabels[selected.news || "hold"]}</span>
                 </div>
               </div>
-              <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div style={{ fontSize: 42, fontWeight: 700, color: "#38bdf8", letterSpacing: -2 }}>{selected.proj ?? "—"}</div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: isMobile ? 32 : 42, fontWeight: 700, color: "#38bdf8", letterSpacing: -2 }}>{selected.proj ?? "—"}</div>
                 <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>PROJECTED PTS</div>
                 {selected.proj && (
                   <div style={{ fontSize: 12, color: selected.trend >= 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
@@ -377,12 +398,12 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isMobile ? 10 : 16, marginBottom: isMobile ? 16 : 24 }}>
               {[
                 { label: "BASED ON", value: selected.sampleWeeks || "Loading...", color: "#94a3b8" },
                 { label: "CONFIDENCE", value: selected.confidence || "—", color: selected.confidenceColor || "#94a3b8" },
-                { label: "FLOOR", value: selected.proj ? (selected.proj - 5).toFixed(1) : "—", color: "#94a3b8" },
-                { label: "CEILING", value: selected.proj ? (selected.proj + 9).toFixed(1) : "—", color: "#94a3b8" },
+                { label: "FLOOR", value: selected.floor != null ? selected.floor : "—", color: "#94a3b8" },
+                { label: "CEILING", value: selected.ceiling != null ? selected.ceiling : "—", color: "#94a3b8" },
               ].map(stat => (
                 <div key={stat.label} style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 8, padding: 16 }} className="glow">
                   <div style={{ fontSize: 9, letterSpacing: 2, color: "#475569", marginBottom: 6 }}>{stat.label}</div>
@@ -398,7 +419,7 @@ export default function App() {
                   const maxImpact = Math.max(...(selected.factors || []).map(f => Math.abs(f.impact)), 1);
                   return (
                     <div key={s.factor} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, color: "#94a3b8", width: 180, flexShrink: 0 }}>{s.factor}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", width: isMobile ? 120 : 180, flexShrink: 0 }}>{s.factor}</div>
                       <div style={{ flex: 1, height: 6, background: "#1e3a5f", borderRadius: 3, overflow: "hidden" }}>
                         <div style={{ height: "100%", width: `${Math.abs(s.impact) / maxImpact * 100}%`, background: s.impact >= 0 ? "#22c55e" : "#ef4444", borderRadius: 3 }} />
                       </div>
@@ -441,7 +462,7 @@ export default function App() {
 
       {/* ── WAIVER WIRE TAB ── */}
       {tab === "waiver" && (
-        <div style={{ padding: 28, maxWidth: 800, margin: "0 auto" }}>
+        <div style={{ padding: isMobile ? 14 : 28, maxWidth: 800, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
           <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 20 }}>WAIVER WIRE — SEARCH & ADD PLAYERS</div>
           <div style={{ position: "relative", marginBottom: 24 }}>
             <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 16, color: "#475569" }}>🔍</div>
@@ -465,12 +486,12 @@ export default function App() {
                         {p.team} · Floor: {p.floor} · Ceiling: {p.ceiling} · {p.games_sampled} games
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", marginRight: 16 }}>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: "#fbbf24" }}>{p.projected_points}</div>
+                    <div style={{ textAlign: "right", marginRight: isMobile ? 0 : 16 }}>
+                      <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: "#fbbf24" }}>{p.projected_points}</div>
                       <div style={{ fontSize: 9, color: "#475569", letterSpacing: 1 }}>PROJ PTS</div>
                     </div>
                     <button onClick={() => handleAddPlayer(p)}
-                      style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, letterSpacing: 1, whiteSpace: "nowrap" }}>
+                      style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, letterSpacing: 1, whiteSpace: "nowrap" }}>
                       + ADD
                     </button>
                   </div>
@@ -493,7 +514,7 @@ export default function App() {
 
       {/* ── LINEUP TAB ── */}
       {tab === "lineup" && (
-        <div style={{ padding: 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100vh - 57px)" }}>
+        <div style={{ padding: isMobile ? 14 : 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
           <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 24 }}>OPTIMAL LINEUP — HALF PPR</div>
           {roster.length === 0 ? (
             <div style={{ textAlign: "center", padding: 60, color: "#475569" }}>Add players to your roster to see lineup suggestions.</div>
@@ -520,11 +541,11 @@ export default function App() {
 
       {/* ── CHAT TAB ── */}
       {tab === "chat" && (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 57px)" }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 57px)" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
             {messages.map((m, i) => (
               <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: "72%", background: m.role === "user" ? "#0ea5e9" : "#0a1628", border: `1px solid ${m.role === "user" ? "#0ea5e9" : "#1e3a5f"}`, borderRadius: m.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "12px 16px", fontSize: 12, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "#cbd5e1" }}>
+                <div style={{ maxWidth: isMobile ? "88%" : "72%", background: m.role === "user" ? "#0ea5e9" : "#0a1628", border: `1px solid ${m.role === "user" ? "#0ea5e9" : "#1e3a5f"}`, borderRadius: m.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "12px 16px", fontSize: 12, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "#cbd5e1" }}>
                   {m.role === "ai" && <div style={{ fontSize: 9, color: "#38bdf8", letterSpacing: 2, marginBottom: 6 }}>BLITZ</div>}
                   {m.role === "ai" ? <SimpleMarkdown text={m.text} /> : m.text}
                 </div>
@@ -536,7 +557,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <div style={{ borderTop: "1px solid #1e3a5f", padding: 16, display: "flex", gap: 10, background: "#050b18" }}>
+          <div style={{ borderTop: "1px solid #1e3a5f", padding: isMobile ? "10px 12px" : 16, display: "flex", gap: 10, background: "#050b18" }}>
             <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()}
               placeholder="Ask about a player, trade, or lineup..."
               style={{ flex: 1, background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, padding: "10px 14px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit" }} />
