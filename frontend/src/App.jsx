@@ -1,7 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-const API = window.location.port === "5173"
-  ? `${window.location.protocol}//${window.location.hostname}:8000`
-  : `${window.location.protocol}//${window.location.hostname}/api`;
+function getAPI() {
+  // Local dev
+  if (window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+  // HuggingFace embeds the app in an iframe — use the actual Space URL directly
+  if (window.location.hostname.includes("huggingface.co")) {
+    return "https://nihalnimmagadda-blitz.hf.space/api";
+  }
+  // Direct Space URL or self-hosted
+  return `${window.location.protocol}//${window.location.hostname}/api`;
+}
+const API = getAPI();
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
