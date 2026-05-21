@@ -5,11 +5,14 @@ colorFrom: blue
 colorTo: green
 sdk: docker
 pinned: false
+app_port: 7860
 ---
 
 # Blitz — AI Fantasy Football Optimizer
 
 Blitz is an AI-powered fantasy football tool that helps you dominate your league.
+
+> **Best experienced at full screen:** [Open Blitz →](https://nihalnimmagadda-blitz.hf.space)
 
 ## Features
 - 🤖 **AI Chat** — Ask anything about your roster, trades, or waiver wire

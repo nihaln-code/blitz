@@ -123,8 +123,12 @@ export default function App() {
       const s = localStorage.getItem("blitz_roster");
       if (s) {
         const parsed = JSON.parse(s);
-        // Strip old hardcoded fields on load
-        return parsed.map(p => ({ name: p.name, pos: p.pos, proj: p.proj ?? null, trend: p.trend ?? 0, injury: p.injury_status ?? p.injury ?? "—", news: p.news ?? "hold" }));
+        // Only restore name, pos, news — never restore proj/floor/ceiling from cache
+        // so they always reload fresh from the backend
+        return parsed.map(p => ({
+          ...defaultPlayer(p.name, p.pos),
+          news: p.news ?? "hold",
+        }));
       }
       return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos));
     } catch { return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos)); }
