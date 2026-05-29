@@ -155,6 +155,25 @@ function deriveInjury(newsArticles) {
 const newsColors = { buy: "#22c55e", hold: "#fbbf24", sell: "#ef4444" };
 const newsLabels = { buy: "↑ Buy", hold: "→ Hold", sell: "↓ Sell" };
 
+function getNewsSig(articles) {
+  const counts = { buy: 0, hold: 0, sell: 0 };
+  articles.forEach(a => { if (counts[a.signal] !== undefined) counts[a.signal]++; });
+  if (counts.sell > counts.buy) return "sell";
+  if (counts.buy > 0) return "buy";
+  return "hold";
+}
+
+function combineSignal(newsSig, trend, injury) {
+  const injured = ["Out", "Ir", "Doubtful"].includes(injury);
+  if (injured) return "sell";
+  const trendSig = trend >= 2.5 ? "buy" : trend <= -2.5 ? "sell" : "hold";
+  if (newsSig === "sell") return "sell";               // injury news always sells
+  if (newsSig === "buy" && trendSig === "sell") return "hold"; // conflicting — be cautious
+  if (newsSig === "buy" || trendSig === "buy") return "buy";
+  if (trendSig === "sell") return "sell";
+  return "hold";
+}
+
 function injuryColor(injury) {
   if (!injury || injury === "—") return "#475569";
   if (injury === "Healthy") return "#22c55e";
@@ -279,13 +298,16 @@ export default function App() {
         const articles = Array.isArray(data) ? data : [];
         setPlayerNews(articles);
         setNewsLoading(false);
-        // Derive news signal from live articles
-        const signals = articles.map(a => a.signal);
-        const counts = { buy: 0, hold: 0, sell: 0 };
-        signals.forEach(s => { if (counts[s] !== undefined) counts[s]++; });
-        const news = counts.sell > counts.buy ? "sell" : counts.buy > 0 ? "buy" : "hold";
-        setRoster(prev => prev.map(r => r.name === selected.name ? { ...r, news } : r));
-        setSelected(prev => prev.name === selected.name ? { ...prev, news } : prev);
+        // Combine news sentiment with ML trend using latest player state
+        const newsSig = getNewsSig(articles);
+        setRoster(prev => prev.map(r => {
+          if (r.name !== selected.name) return r;
+          return { ...r, news: combineSignal(newsSig, r.trend ?? 0, r.injury ?? "—") };
+        }));
+        setSelected(prev => {
+          if (prev.name !== selected.name) return prev;
+          return { ...prev, news: combineSignal(newsSig, prev.trend ?? 0, prev.injury ?? "—") };
+        });
       })
       .catch(() => { setPlayerNews([]); setNewsLoading(false); });
   }, [selected.name]);
