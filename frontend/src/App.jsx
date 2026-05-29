@@ -55,6 +55,67 @@ function renderInline(text) {
   );
 }
 
+function WelcomePage({ onStart }) {
+  return (
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0a0f1e", minHeight: "100dvh", width: "100vw", color: "#e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", overflow: "hidden", position: "relative" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 0%,100% { text-shadow: 0 0 20px rgba(56,189,248,0.4); } 50% { text-shadow: 0 0 40px rgba(56,189,248,0.8), 0 0 80px rgba(56,189,248,0.3); } }
+        .welcome-feature:hover { background: #0f1f38 !important; transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important; }
+        .welcome-btn:hover { background: #0284c7 !important; box-shadow: 0 0 40px rgba(56,189,248,0.5) !important; transform: translateY(-1px); }
+        .welcome-btn:active { transform: translateY(1px); }
+      `}</style>
+
+      {/* Grid background */}
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(56,189,248,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px)", backgroundSize: "48px 48px", pointerEvents: "none" }} />
+      {/* Radial glow */}
+      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: 600, height: 600, background: "radial-gradient(circle, rgba(14,165,233,0.07) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+      {/* Logo */}
+      <div style={{ animation: "fadeUp 0.5s ease both", textAlign: "center", marginBottom: 28 }}>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>🏈</div>
+        <div style={{ fontSize: 52, fontWeight: 700, letterSpacing: 10, color: "#38bdf8", animation: "shimmer 3s ease infinite" }}>BLITZ</div>
+        <div style={{ fontSize: 10, letterSpacing: 5, color: "#334155", marginTop: 6 }}>FANTASY FOOTBALL OPTIMIZER</div>
+      </div>
+
+      {/* Tagline */}
+      <div style={{ animation: "fadeUp 0.5s 0.12s ease both", textAlign: "center", marginBottom: 44, maxWidth: 500 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: "#f1f5f9", marginBottom: 14, lineHeight: 1.4 }}>Stop guessing. Start winning.</div>
+        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.8 }}>
+          Your AI-powered fantasy co-manager — built on real 2024–2025 NFL data,<br />
+          machine learning projections, and a live AI chat assistant.
+        </div>
+      </div>
+
+      {/* Feature cards */}
+      <div style={{ animation: "fadeUp 0.5s 0.22s ease both", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, width: "100%", maxWidth: 580, marginBottom: 44 }}>
+        {[
+          { icon: "📊", title: "ML Projections", desc: "XGBoost predictions with SHAP factor breakdowns — know exactly why a player is trending." },
+          { icon: "📉", title: "Floor & Ceiling", desc: "See your upside and downside for every player, derived from real game volatility." },
+          { icon: "🔍", title: "Waiver Wire", desc: "Search any NFL player and get instant stats, projections, and injury status." },
+          { icon: "💬", title: "AI Co-Manager", desc: "Ask Blitz about trades, lineup decisions, or breakout candidates — 24/7." },
+        ].map(f => (
+          <div key={f.title} className="welcome-feature" style={{ background: "#070d1a", border: "1px solid #1e3a5f", borderRadius: 10, padding: "20px 14px", textAlign: "center", transition: "all 0.2s", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
+            <div style={{ fontSize: 26, marginBottom: 10 }}>{f.icon}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", letterSpacing: 2, marginBottom: 8 }}>{f.title.toUpperCase()}</div>
+            <div style={{ fontSize: 10, color: "#475569", lineHeight: 1.7 }}>{f.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <div style={{ animation: "fadeUp 0.5s 0.32s ease both", textAlign: "center" }}>
+        <button onClick={onStart} className="welcome-btn" style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "16px 52px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: 3, boxShadow: "0 0 24px rgba(56,189,248,0.3)", transition: "all 0.2s" }}>
+          GET STARTED →
+        </button>
+        <div style={{ marginTop: 14, fontSize: 10, color: "#1e3a5f", letterSpacing: 1 }}>FREE · NO ACCOUNT NEEDED · REAL NFL DATA</div>
+      </div>
+    </div>
+  );
+}
+
 // Minimal seed roster — only name and position, everything else loads from backend
 const SEED_ROSTER = [
   { name: "Josh Allen",           pos: "QB" },
@@ -135,6 +196,7 @@ export default function App() {
   })();
 
   const isMobile = useIsMobile();
+  const [started, setStarted] = useState(false);
   const [roster, setRoster] = useState(savedRoster);
   const [selected, setSelected] = useState(savedRoster[0]);
   const [tab, setTab] = useState("roster");
@@ -286,6 +348,8 @@ export default function App() {
     }
     setLoading(false);
   };
+
+  if (!started) return <WelcomePage onStart={() => setStarted(true)} />;
 
   return (
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0a0f1e", height: "100vh", width: "100vw", color: "#e2e8f0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
