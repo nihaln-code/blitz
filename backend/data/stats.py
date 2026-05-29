@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import requests as _requests
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from ml.model import (
@@ -35,48 +37,93 @@ print("Building opponent defense rankings...")
 _opp_defense = _build_opp_defense_table(_weekly)
 print("Defense table ready.")
 
-# ── Load injury report from nfl_data_py ───────────────────────────────────────
-def _load_injuries() -> pd.DataFrame:
-    try:
-        print("Loading injury reports...")
-        current_year = 2025
-        df = nfl_data.import_injuries([current_year])
-        df["player_name"] = df["full_name"].str.lower() if "full_name" in df.columns else df["player_name"].str.lower()
-        # Keep only the most recent week per player
-        df = df.sort_values("week").groupby("player_name").last().reset_index()
-        print(f"Loaded {len(df)} injury records.")
-        return df
-    except Exception as e:
-        print(f"Could not load injuries: {e}")
-        return pd.DataFrame()
-
-_injuries = _load_injuries()
+# ── ESPN injury lookup with 4-hour cache ──────────────────────────────────────
+_espn_cache: dict = {}
+_ESPN_TTL = timedelta(hours=4)
 
 
 def get_injury_status(player_name: str) -> str:
-    """Look up injury status from the official NFL injury report via nfl_data_py."""
-    if _injuries.empty:
+    """
+    Real-time injury status from ESPN API with 4-hour in-memory cache.
+    Falls back to nfl_data_py injury report if ESPN is unreachable.
+    """
+    key = player_name.lower().strip()
+
+    # Return cached result if fresh
+    if key in _espn_cache:
+        status, ts = _espn_cache[key]
+        if datetime.now() - ts < _ESPN_TTL:
+            return status
+
+    try:
+        # Step 1: find the ESPN athlete ID by searching for the player
+        search = _requests.get(
+            "https://site.api.espn.com/apis/search/v2",
+            params={"query": player_name, "sport": "football", "league": "nfl", "limit": 5},
+            timeout=3,
+        ).json()
+
+        athlete_id = None
+        for bucket in search.get("results", {}).get("buckets", []):
+            for r in bucket.get("results", []):
+                if r.get("type") == "player":
+                    athlete_id = r.get("id")
+                    break
+            if athlete_id:
+                break
+        # alternate response shape
+        if not athlete_id:
+            for hit in search.get("hits", []):
+                if hit.get("type") == "player":
+                    athlete_id = hit.get("id")
+                    break
+
+        if not athlete_id:
+            raise ValueError("not found")
+
+        # Step 2: get athlete details including injuries
+        athlete_data = _requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/athletes/{athlete_id}",
+            timeout=3,
+        ).json()
+
+        athlete = athlete_data.get("athlete", athlete_data)
+
+        # Active injuries take priority
+        injuries = athlete.get("injuries", [])
+        if injuries:
+            inj_status = injuries[0].get("status") or injuries[0].get("type", {}).get("name", "")
+            if inj_status:
+                _espn_cache[key] = (inj_status, datetime.now())
+                return inj_status
+
+        # Fall back to roster status (Active / Questionable / Out / IR etc.)
+        status_name = (athlete.get("status") or {}).get("name", "Active")
+        result = "Healthy" if status_name == "Active" else status_name
+        _espn_cache[key] = (result, datetime.now())
+        return result
+
+    except Exception:
+        # ESPN unavailable — fall back to nfl_data_py static report
+        try:
+            df = nfl_data.import_injuries([2025])
+            df["player_name"] = df["full_name"].str.lower() if "full_name" in df.columns else df["player_name"].str.lower()
+            df = df.sort_values("week").groupby("player_name").last().reset_index()
+            name_lower = player_name.lower().strip()
+            match = df[df["player_name"].str.contains(name_lower, na=False)]
+            if match.empty:
+                last = name_lower.split()[-1]
+                match = df[df["player_name"].str.contains(last, na=False)]
+            if not match.empty:
+                row = match.iloc[0]
+                status = str(row.get("report_status", "") or "").strip()
+                if status and status != "nan":
+                    _espn_cache[key] = (status, datetime.now())
+                    return status
+        except Exception:
+            pass
+        _espn_cache[key] = ("—", datetime.now())
         return "—"
-    name_lower = player_name.lower().strip()
-    match = _injuries[_injuries["player_name"].str.contains(name_lower, na=False)]
-    if match.empty:
-        # Try partial last name match
-        last_name = name_lower.split()[-1] if name_lower else ""
-        match = _injuries[_injuries["player_name"].str.contains(last_name, na=False)]
-    if match.empty:
-        return "Healthy"
-    row = match.iloc[0]
-    # report_status: Questionable, Doubtful, Out, IR
-    status = str(row.get("report_status", "") or "").strip()
-    if not status or status == "nan":
-        # Fall back to practice status
-        practice = str(row.get("practice_status", "") or "").strip()
-        if "did not practice" in practice.lower():
-            return "Did Not Practice"
-        if "limited" in practice.lower():
-            return "Limited"
-        return "Healthy"
-    return status
 
 
 def get_player_stats(player_name: str) -> dict:

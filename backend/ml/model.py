@@ -82,13 +82,20 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
             hist = pdf.iloc[:i]           # everything BEFORE this week
             curr = pdf.iloc[i]            # the week we're predicting
 
-            fp_vals = hist["fp"].values[-4:]
-            if len(fp_vals) < 2:
+            all_fp = hist["fp"].values
+            if len(all_fp) < 2:
                 continue
 
-            roll4_fp  = float(np.mean(fp_vals[-4:])) if len(fp_vals) >= 4 else float(np.mean(fp_vals))
-            roll2_fp  = float(np.mean(fp_vals[-2:]))
-            roll4_std = float(np.std(fp_vals[-4:])) if len(fp_vals) >= 4 else 0.0
+            # Match the same healthy-game filter used in predict()
+            MIN_HEALTHY_FP = {"QB": 8.0, "RB": 2.0, "WR": 2.0, "TE": 2.0}.get(pos, 2.0)
+            healthy = all_fp[all_fp >= MIN_HEALTHY_FP]
+            if len(healthy) < 2:
+                healthy = all_fp
+            recent = healthy[-6:]
+
+            roll4_fp  = float(np.mean(healthy[-4:])) if len(healthy) >= 4 else float(np.mean(healthy))
+            roll2_fp  = float(np.mean(healthy[-2:]))
+            roll4_std = float(np.std(recent)) if len(recent) >= 2 else 0.0
 
             # TD rate
             td_cols = ["passing_tds", "rushing_tds", "receiving_tds"]
