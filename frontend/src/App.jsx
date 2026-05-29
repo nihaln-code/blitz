@@ -295,18 +295,20 @@ export default function App() {
     fetch(`${API}/news/${encodeURIComponent(selected.name)}`)
       .then(r => r.json())
       .then(data => {
-        const articles = Array.isArray(data) ? data : [];
+        const articles = Array.isArray(data) ? data : (data.articles ?? []);
+        const aiSignal = data.overall_signal ?? null;
+        const aiReason = data.signal_reason ?? "";
         setPlayerNews(articles);
         setNewsLoading(false);
-        // Combine news sentiment with ML trend using latest player state
-        const newsSig = getNewsSig(articles);
         setRoster(prev => prev.map(r => {
           if (r.name !== selected.name) return r;
-          return { ...r, news: combineSignal(newsSig, r.trend ?? 0, r.injury ?? "—") };
+          const news = aiSignal ?? combineSignal(getNewsSig(articles), r.trend ?? 0, r.injury ?? "—");
+          return { ...r, news, signalReason: aiReason };
         }));
         setSelected(prev => {
           if (prev.name !== selected.name) return prev;
-          return { ...prev, news: combineSignal(newsSig, prev.trend ?? 0, prev.injury ?? "—") };
+          const news = aiSignal ?? combineSignal(getNewsSig(articles), prev.trend ?? 0, prev.injury ?? "—");
+          return { ...prev, news, signalReason: aiReason };
         });
       })
       .catch(() => { setPlayerNews([]); setNewsLoading(false); });
@@ -516,6 +518,9 @@ export default function App() {
                   )}
                   <span style={{ background: "#0f1f38", border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{newsLabels[selected.news || "hold"]}</span>
                 </div>
+                {selected.signalReason && (
+                  <div style={{ fontSize: 10, color: "#475569", marginTop: 6, fontStyle: "italic" }}>{selected.signalReason}</div>
+                )}
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: isMobile ? 32 : 42, fontWeight: 700, color: "#38bdf8", letterSpacing: -2 }}>{selected.proj ?? "—"}</div>

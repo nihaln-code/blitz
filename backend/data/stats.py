@@ -132,6 +132,15 @@ def get_player_stats(player_name: str) -> dict:
     season_avg = float(season_games["fp"].mean()) if len(season_games) >= 4 else proj
     trend      = round(proj - season_avg, 1)
 
+    # ── Usage trend (targets / carries / attempts vs season avg) ──────────────
+    USAGE_COL = {"QB": "attempts", "RB": "carries", "WR": "targets", "TE": "targets"}.get(position, "targets")
+    if USAGE_COL in all_games.columns:
+        usage_season = float(season_games[USAGE_COL].fillna(0).mean()) if len(season_games) > 0 else 0.0
+        usage_recent = float(recent[USAGE_COL].fillna(0).mean()) if len(recent) > 0 else 0.0
+        usage_trend  = round(usage_recent - usage_season, 1)
+    else:
+        usage_season = usage_recent = usage_trend = 0.0
+
     # ── Recent games ──────────────────────────────────────────────────────────
     game_cols = ["week", "fp"]
     if "opponent_team" in recent.columns:
@@ -169,6 +178,10 @@ def get_player_stats(player_name: str) -> dict:
         "games_sampled":    len(recent),
         "sample_weeks":     sample_desc,
         "injury_status":    injury_status,
+        "usage_label":      USAGE_COL,
+        "usage_recent":     round(usage_recent, 1),
+        "usage_season":     round(usage_season, 1),
+        "usage_trend":      round(usage_trend, 1),
     }
 
 

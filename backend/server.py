@@ -117,9 +117,51 @@ async def get_news(player_name: str):
                 "publishedAt": a.get("publishedAt", ""),
                 "signal": signal,
             })
-        return results
+
+        # ── AI overall signal ──────────────────────────────────────────────────
+        overall_signal = "hold"
+        signal_reason  = ""
+        if settings.openai_api_key and results:
+            try:
+                from openai import OpenAI as _OAI
+                import json as _json
+                stats = get_player_stats(player_name)
+                headlines = "\n".join(f"- {r['title']}" for r in results[:5])
+                usage_line = ""
+                if stats.get("found") and stats.get("usage_label"):
+                    usage_line = (
+                        f"Usage ({stats['usage_label']}): "
+                        f"{stats['usage_recent']} last 4 games vs "
+                        f"{stats['usage_season']} season avg "
+                        f"({'+' if stats['usage_trend'] >= 0 else ''}{stats['usage_trend']})"
+                    )
+                prompt = f"""You are a fantasy football analyst. Give a fantasy buy/sell/hold signal for {player_name}.
+
+Position: {stats.get('position','?')} | Team: {stats.get('team','?')}
+ML Projection: {stats.get('projected_points','?')} pts ({'+' if (stats.get('trend') or 0) >= 0 else ''}{stats.get('trend','?')} vs season avg) | Confidence: {stats.get('confidence','?')}
+Injury: {stats.get('injury_status','Healthy')}
+{usage_line}
+
+Recent news:
+{headlines}
+
+Reply with ONLY valid JSON: {{"signal":"buy|hold|sell","reason":"one sentence under 12 words"}}"""
+
+                ai_resp = _OAI(api_key=settings.openai_api_key).chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=60,
+                    temperature=0,
+                )
+                parsed = _json.loads(ai_resp.choices[0].message.content.strip())
+                overall_signal = parsed.get("signal", "hold")
+                signal_reason  = parsed.get("reason", "")
+            except Exception:
+                pass  # fall back to hold
+
+        return {"articles": results, "overall_signal": overall_signal, "signal_reason": signal_reason}
     except Exception:
-        return []
+        return {"articles": [], "overall_signal": "hold", "signal_reason": ""}
 
 
 @api_router.get("/health")
