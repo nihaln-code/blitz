@@ -161,45 +161,32 @@ export default function App() {
     try { localStorage.setItem("blitz_roster", JSON.stringify(roster)); } catch {}
   }, [roster]);
 
-  // Fetch projections for all roster players
+  // Fetch projections for roster players that are missing data (runs when roster names change)
+  const _rosterKey = roster.map(p => p.name).join("|");
   useEffect(() => {
     roster.forEach(async (p) => {
+      if (p.proj !== null) return; // already has fresh data
       try {
         const res = await fetch(`${API}/player/${encodeURIComponent(p.name)}`);
         const data = await res.json();
         if (data.found) {
-          setRoster(prev => prev.map(r =>
-            r.name === p.name ? {
-              ...r,
-              proj: data.projected_points,
-              sampleWeeks: data.sample_weeks,
-              trend: data.trend ?? 0,
-              confidence: data.confidence,
-              confidenceColor: data.confidence_color ?? "#22c55e",
-              factors: data.factors ?? [],
-              injury: data.injury_status ?? "—",
-              floor: data.floor ?? null,
-              ceiling: data.ceiling ?? null,
-            } : r
-          ));
-          setSelected(prev =>
-            prev.name === p.name ? {
-              ...prev,
-              proj: data.projected_points,
-              sampleWeeks: data.sample_weeks,
-              trend: data.trend ?? 0,
-              confidence: data.confidence,
-              confidenceColor: data.confidence_color ?? "#22c55e",
-              factors: data.factors ?? [],
-              injury: data.injury_status ?? "—",
-              floor: data.floor ?? null,
-              ceiling: data.ceiling ?? null,
-            } : prev
-          );
+          const update = {
+            proj: data.projected_points,
+            sampleWeeks: data.sample_weeks,
+            trend: data.trend ?? 0,
+            confidence: data.confidence,
+            confidenceColor: data.confidence_color ?? "#22c55e",
+            factors: data.factors ?? [],
+            injury: data.injury_status ?? "—",
+            floor: data.floor ?? null,
+            ceiling: data.ceiling ?? null,
+          };
+          setRoster(prev => prev.map(r => r.name === p.name ? { ...r, ...update } : r));
+          setSelected(prev => prev.name === p.name ? { ...prev, ...update } : prev);
         }
       } catch {}
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [_rosterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch news + derive injury status dynamically
   useEffect(() => {
@@ -239,8 +226,18 @@ export default function App() {
 
   const confirmAdd = () => {
     if (!addingPlayer) return;
-    const newPlayer = defaultPlayer(addingPlayer.player, addingPlayer.position || "WR");
-    newPlayer.proj = addingPlayer.projected_points ?? null;
+    const newPlayer = {
+      ...defaultPlayer(addingPlayer.player, addingPlayer.position || "WR"),
+      proj: addingPlayer.projected_points ?? null,
+      floor: addingPlayer.floor ?? null,
+      ceiling: addingPlayer.ceiling ?? null,
+      trend: addingPlayer.trend ?? 0,
+      confidence: addingPlayer.confidence ?? null,
+      confidenceColor: addingPlayer.confidence_color ?? "#22c55e",
+      factors: addingPlayer.factors ?? [],
+      injury: addingPlayer.injury_status ?? "—",
+      sampleWeeks: addingPlayer.sample_weeks ?? null,
+    };
     if (dropTarget) {
       setRoster(r => r.map(p => p.name === dropTarget.name ? newPlayer : p));
     } else {
@@ -451,8 +448,7 @@ export default function App() {
                 <div style={{ fontSize: 11, color: "#475569" }}>No recent news found for {selected.name}.</div>
               )}
               {!newsLoading && playerNews.map((n, i) => {
-                const hoursAgo = n.publishedAt ? Math.round((Date.now() - new Date(n.publishedAt)) / 3600000) : null;
-                const timeAgo = hoursAgo !== null ? hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago` : "";
+                const timeAgo = n.publishedAt ? new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
                 return (
                   <div key={i} style={{ borderLeft: `2px solid ${newsColors[n.signal]}`, paddingLeft: 14, marginBottom: 14 }}>
                     <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
