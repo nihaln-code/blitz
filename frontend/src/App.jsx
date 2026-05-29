@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { auth, db, onAuthStateChanged, signInAnonymously, saveRoster, loadRoster } from "./firebase";
 function getAPI() {
   // Local dev
   if (window.location.port === "5173") {
@@ -179,26 +180,12 @@ function DropModal({ player, onConfirm, onCancel }) {
 }
 
 export default function App() {
-  const savedRoster = (() => {
-    try {
-      const s = localStorage.getItem("blitz_roster");
-      if (s) {
-        const parsed = JSON.parse(s);
-        // Only restore name, pos, news — never restore proj/floor/ceiling from cache
-        // so they always reload fresh from the backend
-        return parsed.map(p => ({
-          ...defaultPlayer(p.name, p.pos),
-          news: p.news ?? "hold",
-        }));
-      }
-      return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos));
-    } catch { return SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos)); }
-  })();
-
   const isMobile = useIsMobile();
   const [started, setStarted] = useState(false);
-  const [roster, setRoster] = useState(savedRoster);
-  const [selected, setSelected] = useState(savedRoster[0]);
+  const [userId, setUserId] = useState(null);
+  const [rosterLoaded, setRosterLoaded] = useState(false);
+  const [roster, setRoster] = useState([]);
+  const [selected, setSelected] = useState(defaultPlayer("", "QB"));
   const [tab, setTab] = useState("roster");
   const [showDetail, setShowDetail] = useState(false); // mobile: toggle between list and detail
 
@@ -219,9 +206,41 @@ export default function App() {
   ]);
   const [loading, setLoading] = useState(false);
 
+  // Firebase: sign in anonymously, load saved roster
+  const _saveTimer = useRef(null);
   useEffect(() => {
-    try { localStorage.setItem("blitz_roster", JSON.stringify(roster)); } catch {}
-  }, [roster]);
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      try {
+        const u = user || (await signInAnonymously(auth)).user;
+        setUserId(u.uid);
+        const saved = await loadRoster(u.uid);
+        if (saved && saved.length > 0) {
+          const loaded = saved.map(p => ({ ...defaultPlayer(p.name, p.pos), news: p.news ?? "hold" }));
+          setRoster(loaded);
+          setSelected(loaded[0]);
+        } else {
+          const seed = SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos));
+          setRoster(seed);
+          setSelected(seed[0]);
+        }
+      } catch {
+        const seed = SEED_ROSTER.map(p => defaultPlayer(p.name, p.pos));
+        setRoster(seed);
+        setSelected(seed[0]);
+      }
+      setRosterLoaded(true);
+    });
+    return () => unsub();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Firebase: save roster to Firestore on change (debounced 1.5s)
+  useEffect(() => {
+    if (!userId || !rosterLoaded || roster.length === 0) return;
+    if (_saveTimer.current) clearTimeout(_saveTimer.current);
+    _saveTimer.current = setTimeout(() => {
+      saveRoster(userId, roster).catch(() => {});
+    }, 1500);
+  }, [roster, userId, rosterLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch projections for roster players that are missing data (runs when roster names change)
   const _rosterKey = roster.map(p => p.name).join("|");
@@ -252,6 +271,7 @@ export default function App() {
 
   // Fetch news + derive injury status dynamically
   useEffect(() => {
+    if (!selected?.name) return;
     setPlayerNews([]);
     setNewsLoading(true);
     fetch(`${API}/news/${encodeURIComponent(selected.name)}`)
@@ -350,6 +370,17 @@ export default function App() {
   };
 
   if (!started) return <WelcomePage onStart={() => setStarted(true)} />;
+
+  if (!rosterLoaded) return (
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0a0f1e", height: "100dvh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <style>{`@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }`}</style>
+      <div style={{ fontSize: 28 }}>🏈</div>
+      <div style={{ fontSize: 11, color: "#38bdf8", letterSpacing: 3 }}>LOADING YOUR ROSTER...</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#38bdf8", animation: `pulse 1s ${i * 0.2}s infinite` }} />)}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0a0f1e", height: "100vh", width: "100vw", color: "#e2e8f0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
