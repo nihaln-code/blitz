@@ -63,7 +63,6 @@ function WelcomePage({ onStart }) {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes shimmer { 0%,100% { text-shadow: 0 0 20px rgba(56,189,248,0.4); } 50% { text-shadow: 0 0 40px rgba(56,189,248,0.8), 0 0 80px rgba(56,189,248,0.3); } }
-        .welcome-feature:hover { background: #0f1f38 !important; transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important; }
         .welcome-btn:hover { background: #0284c7 !important; box-shadow: 0 0 40px rgba(56,189,248,0.5) !important; transform: translateY(-1px); }
         .welcome-btn:active { transform: translateY(1px); }
       `}</style>
@@ -74,43 +73,44 @@ function WelcomePage({ onStart }) {
       <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: 600, height: 600, background: "radial-gradient(circle, rgba(14,165,233,0.07) 0%, transparent 70%)", pointerEvents: "none" }} />
 
       {/* Logo */}
-      <div style={{ animation: "fadeUp 0.5s ease both", textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontSize: 52, marginBottom: 12 }}>🏈</div>
-        <div style={{ fontSize: 52, fontWeight: 700, letterSpacing: 10, color: "#38bdf8", animation: "shimmer 3s ease infinite" }}>BLITZ</div>
+      <div style={{ animation: "fadeUp 0.5s ease both", textAlign: "center", marginBottom: 20 }}>
+        <div style={{ fontSize: 48, marginBottom: 10 }}>🏈</div>
+        <div style={{ fontSize: 48, fontWeight: 700, letterSpacing: 10, color: "#38bdf8", animation: "shimmer 3s ease infinite" }}>BLITZ</div>
         <div style={{ fontSize: 10, letterSpacing: 5, color: "#334155", marginTop: 6 }}>FANTASY FOOTBALL OPTIMIZER</div>
       </div>
 
       {/* Tagline */}
-      <div style={{ animation: "fadeUp 0.5s 0.12s ease both", textAlign: "center", marginBottom: 44, maxWidth: 500 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, color: "#f1f5f9", marginBottom: 14, lineHeight: 1.4 }}>Stop guessing. Start winning.</div>
+      <div style={{ animation: "fadeUp 0.5s 0.12s ease both", textAlign: "center", marginBottom: 32, maxWidth: 500 }}>
+        <div style={{ fontSize: 17, fontWeight: 600, color: "#f1f5f9", marginBottom: 12, lineHeight: 1.4 }}>Stop guessing. Start winning.</div>
         <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.8 }}>
-          Your AI-powered fantasy co-manager — built on real 2024–2025 NFL data,<br />
-          machine learning projections, and a live AI chat assistant.
+          Your AI-powered fantasy co-manager — built on real 2024–2025 NFL data, machine learning projections, and a live AI chat assistant.
         </div>
       </div>
 
-      {/* Feature cards */}
-      <div style={{ animation: "fadeUp 0.5s 0.22s ease both", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, width: "100%", maxWidth: 580, marginBottom: 44 }}>
+      {/* CTA */}
+      <div style={{ animation: "fadeUp 0.5s 0.2s ease both", textAlign: "center", marginBottom: 44 }}>
+        <button onClick={onStart} className="welcome-btn" style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "15px 52px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: 3, boxShadow: "0 0 24px rgba(56,189,248,0.3)", transition: "all 0.2s" }}>
+          GET STARTED →
+        </button>
+        <span style={{ marginLeft: 16, fontSize: 10, color: "#1e3a5f", letterSpacing: 1 }}>FREE · NO ACCOUNT NEEDED · REAL NFL DATA</span>
+      </div>
+
+      {/* Feature list */}
+      <div style={{ animation: "fadeUp 0.5s 0.3s ease both", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, width: "100%", maxWidth: 580 }}>
         {[
           { icon: "📊", title: "ML Projections", desc: "XGBoost predictions with SHAP factor breakdowns — know exactly why a player is trending." },
           { icon: "📉", title: "Floor & Ceiling", desc: "See your upside and downside for every player, derived from real game volatility." },
           { icon: "🔍", title: "Waiver Wire", desc: "Search any NFL player and get instant stats, projections, and injury status." },
           { icon: "💬", title: "AI Co-Manager", desc: "Ask Blitz about trades, lineup decisions, or breakout candidates — 24/7." },
         ].map(f => (
-          <div key={f.title} className="welcome-feature" style={{ background: "#070d1a", border: "1px solid #1e3a5f", borderRadius: 10, padding: "20px 14px", textAlign: "center", transition: "all 0.2s", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
-            <div style={{ fontSize: 26, marginBottom: 10 }}>{f.icon}</div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", letterSpacing: 2, marginBottom: 8 }}>{f.title.toUpperCase()}</div>
+          <div key={f.title} style={{ borderLeft: "2px solid #1e3a5f", paddingLeft: 14, paddingTop: 2, paddingBottom: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 16 }}>{f.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", letterSpacing: 2 }}>{f.title.toUpperCase()}</span>
+            </div>
             <div style={{ fontSize: 10, color: "#475569", lineHeight: 1.7 }}>{f.desc}</div>
           </div>
         ))}
-      </div>
-
-      {/* CTA */}
-      <div style={{ animation: "fadeUp 0.5s 0.32s ease both", textAlign: "center" }}>
-        <button onClick={onStart} className="welcome-btn" style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "16px 52px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: 3, boxShadow: "0 0 24px rgba(56,189,248,0.3)", transition: "all 0.2s" }}>
-          GET STARTED →
-        </button>
-        <div style={{ marginTop: 14, fontSize: 10, color: "#1e3a5f", letterSpacing: 1 }}>FREE · NO ACCOUNT NEEDED · REAL NFL DATA</div>
       </div>
     </div>
   );
@@ -405,6 +405,7 @@ export default function App() {
 
       {/* Header */}
       <div style={{ borderBottom: "1px solid #1e3a5f", padding: isMobile ? "10px 14px" : "14px 24px", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, background: "#050b18", flexShrink: 0 }}>
+        <button onClick={() => setStarted(false)} title="Back to home" style={{ background: "transparent", border: "none", color: "#334155", cursor: "pointer", fontSize: 16, padding: "0 4px 0 0", lineHeight: 1, flexShrink: 0 }}>⌂</button>
         <div style={{ fontSize: isMobile ? 18 : 22 }}>🏈</div>
         {!isMobile && <div>
           <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: "#38bdf8" }}>BLITZ</div>

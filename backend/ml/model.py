@@ -1,8 +1,8 @@
 """
 ml/model.py - XGBoost fantasy football projection model
 
-Training data:  2024 regular season (weeks 5-18, to have rolling history)
-Validation:     2025 regular season
+Training data:  all loaded seasons except the most recent complete one
+Validation:     most recent complete season
 Target:         Full PPR fantasy points for a given week
 Features:       Rolling averages, usage trends, opponent defense rank, consistency
 
@@ -195,15 +195,17 @@ def _get_feature_cols(pos: str) -> list:
 
 def train(df: pd.DataFrame) -> dict:
     """
-    Train one XGBoost model per position on 2024 data.
+    Train one XGBoost model per position. Trains on all seasons except the
+    most recent complete one, which is used for validation.
     Returns dict of {position: model}.
     """
     print("Building feature set...")
     features_df = _build_features(df)
 
-    # Train on 2024, validate on 2025
-    train_df = features_df[features_df["season"] == 2024]
-    val_df   = features_df[features_df["season"] == 2025]
+    all_seasons = sorted(features_df["season"].unique())
+    val_season  = all_seasons[-1] if len(all_seasons) >= 2 else None
+    train_df    = features_df[features_df["season"] != val_season] if val_season else features_df
+    val_df      = features_df[features_df["season"] == val_season] if val_season else pd.DataFrame()
 
     models = {}
     print(f"\n{'Position':<8} {'Train rows':<12} {'Val rows':<10} {'Val MAE':<10} {'Baseline MAE'}")
