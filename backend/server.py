@@ -73,10 +73,18 @@ async def get_news(player_name: str):
     if not settings.newsapi_key:
         return []
 
-    BUY_KEYWORDS = ["starter", "healthy", "full practice", "more involved", "featured",
-                    "cleared", "active", "explosive", "extension", "return"]
-    SELL_KEYWORDS = ["limited", "questionable", "doubtful", "out", "ir", "injured",
-                     "day-to-day", "reduced", "benched", "cut", "scratch"]
+    import re as _re
+
+    BUY_KEYWORDS = [
+        r"\bstarter\b", r"\bhealthy\b", r"\bfull practice\b", r"\bmore involved\b",
+        r"\bcleared\b", r"\bexplosive\b", r"\bcontract extension\b", r"\breturns to lineup\b",
+        r"\bback in lineup\b", r"\bno injury\b", r"\bfull participant\b",
+    ]
+    SELL_KEYWORDS = [
+        r"\bquestionable\b", r"\bdoubtful\b", r"\bruled out\b", r"\binjured reserve\b",
+        r"\bday-to-day\b", r"\bbenched\b", r"\blimited practice\b", r"\bdid not practice\b",
+        r"\bscratch\b", r"\bout for season\b", r"\bmissed practice\b",
+    ]
 
     try:
         resp = http_requests.get(
@@ -94,15 +102,14 @@ async def get_news(player_name: str):
         for a in resp.json().get("articles", []):
             title = a.get("title", "") or ""
             text = (title + " " + (a.get("description", "") or "")).lower()
-            signal = "hold"
-            for kw in BUY_KEYWORDS:
-                if kw in text:
-                    signal = "buy"
-                    break
-            for kw in SELL_KEYWORDS:
-                if kw in text:
-                    signal = "sell"
-                    break
+            buy_hits  = sum(1 for kw in BUY_KEYWORDS  if _re.search(kw, text))
+            sell_hits = sum(1 for kw in SELL_KEYWORDS if _re.search(kw, text))
+            if sell_hits > buy_hits:
+                signal = "sell"
+            elif buy_hits > 0:
+                signal = "buy"
+            else:
+                signal = "hold"
             results.append({
                 "source": a.get("source", {}).get("name", "Unknown"),
                 "title": title,

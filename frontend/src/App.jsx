@@ -88,30 +88,29 @@ function WelcomePage({ onStart }) {
         </div>
       </div>
 
+      {/* Feature grid */}
+      <div style={{ animation: "fadeUp 0.5s 0.2s ease both", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, width: "100%", maxWidth: 540, marginBottom: 40 }}>
+        {[
+          { icon: "📊", title: "ML Projections", desc: "XGBoost predictions with SHAP factor breakdowns so you know exactly why a player is trending." },
+          { icon: "🔍", title: "Waiver Wire", desc: "Search any NFL player and get instant projections, floor, ceiling, and injury status." },
+          { icon: "📉", title: "Floor & Ceiling", desc: "10th and 90th percentile outcomes per player, built from real game volatility, not guesswork." },
+          { icon: "💬", title: "AI Co-Manager", desc: "Ask Blitz about trades, lineup decisions, or breakout candidates available 24/7." },
+        ].map(f => (
+          <div key={f.title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{f.icon}</span>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 2, marginBottom: 5 }}>{f.title.toUpperCase()}</div>
+              <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.7 }}>{f.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* CTA */}
-      <div style={{ animation: "fadeUp 0.5s 0.2s ease both", textAlign: "center", marginBottom: 44 }}>
+      <div style={{ animation: "fadeUp 0.5s 0.32s ease both", textAlign: "center" }}>
         <button onClick={onStart} className="welcome-btn" style={{ background: "#0ea5e9", border: "none", color: "#fff", padding: "15px 52px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: 3, boxShadow: "0 0 24px rgba(56,189,248,0.3)", transition: "all 0.2s" }}>
           GET STARTED →
         </button>
-        <span style={{ marginLeft: 16, fontSize: 10, color: "#1e3a5f", letterSpacing: 1 }}>FREE · NO ACCOUNT NEEDED · REAL NFL DATA</span>
-      </div>
-
-      {/* Feature list */}
-      <div style={{ animation: "fadeUp 0.5s 0.3s ease both", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, width: "100%", maxWidth: 580 }}>
-        {[
-          { icon: "📊", title: "ML Projections", desc: "XGBoost predictions with SHAP factor breakdowns — know exactly why a player is trending." },
-          { icon: "📉", title: "Floor & Ceiling", desc: "See your upside and downside for every player, derived from real game volatility." },
-          { icon: "🔍", title: "Waiver Wire", desc: "Search any NFL player and get instant stats, projections, and injury status." },
-          { icon: "💬", title: "AI Co-Manager", desc: "Ask Blitz about trades, lineup decisions, or breakout candidates — 24/7." },
-        ].map(f => (
-          <div key={f.title} style={{ borderLeft: "2px solid #1e3a5f", paddingLeft: 14, paddingTop: 2, paddingBottom: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 16 }}>{f.icon}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", letterSpacing: 2 }}>{f.title.toUpperCase()}</span>
-            </div>
-            <div style={{ fontSize: 10, color: "#475569", lineHeight: 1.7 }}>{f.desc}</div>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -282,7 +281,9 @@ export default function App() {
         setNewsLoading(false);
         // Derive news signal from live articles
         const signals = articles.map(a => a.signal);
-        const news = signals.includes("sell") ? "sell" : signals.includes("buy") ? "buy" : "hold";
+        const counts = { buy: 0, hold: 0, sell: 0 };
+        signals.forEach(s => { if (counts[s] !== undefined) counts[s]++; });
+        const news = counts.sell > counts.buy ? "sell" : counts.buy > 0 ? "buy" : "hold";
         setRoster(prev => prev.map(r => r.name === selected.name ? { ...r, news } : r));
         setSelected(prev => prev.name === selected.name ? { ...prev, news } : prev);
       })

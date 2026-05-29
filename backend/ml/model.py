@@ -305,18 +305,16 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
     if len(fp_vals) < 2:
         return None
 
-    # Filter out near-DNP games (injury/early exit) before computing volatility.
+    # Filter out near-DNP games (injury/early exit) before computing rolling stats.
     # A QB scoring <8 or a skill player scoring <2 almost certainly didn't play a full game.
     MIN_HEALTHY_FP = {"QB": 8.0, "RB": 2.0, "WR": 2.0, "TE": 2.0}.get(position, 2.0)
     healthy_vals = fp_vals[fp_vals >= MIN_HEALTHY_FP]
-    # Fall back to all values if we'd be left with too few
     if len(healthy_vals) < 2:
         healthy_vals = fp_vals
-    # Use last 6 healthy games for std (more stable than 4)
-    recent_vals = healthy_vals[-6:]
+    recent_vals = healthy_vals[-6:]  # last 6 healthy games for std
 
-    roll4_fp  = float(np.mean(fp_vals[-4:])) if len(fp_vals) >= 4 else float(np.mean(fp_vals))
-    roll2_fp  = float(np.mean(fp_vals[-2:]))
+    roll4_fp  = float(np.mean(healthy_vals[-4:])) if len(healthy_vals) >= 4 else float(np.mean(healthy_vals))
+    roll2_fp  = float(np.mean(healthy_vals[-2:]))
     roll4_std = float(np.std(recent_vals)) if len(recent_vals) >= 2 else 0.0
 
     td_cols = ["passing_tds", "rushing_tds", "receiving_tds"]
