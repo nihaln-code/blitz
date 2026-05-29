@@ -15,7 +15,7 @@ from ml.model import (
 )
 
 print("Loading NFL data...")
-_weekly = nfl.load_player_stats([2023, 2024, 2025]).to_pandas()
+_weekly = nfl.load_player_stats([2022, 2023, 2024, 2025]).to_pandas()
 _weekly["player_display_name"] = _weekly["player_display_name"].str.lower()
 print(f"Loaded {len(_weekly)} rows of NFL stats.")
 

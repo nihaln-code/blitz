@@ -83,7 +83,7 @@ function WelcomePage({ onStart }) {
       <div style={{ animation: "fadeUp 0.5s 0.12s ease both", textAlign: "center", marginBottom: 32, maxWidth: 500 }}>
         <div style={{ fontSize: 17, fontWeight: 600, color: "#f1f5f9", marginBottom: 12, lineHeight: 1.4 }}>Stop guessing. Start winning.</div>
         <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.8 }}>
-          Your AI-powered fantasy co-manager — built on real 2024–2025 NFL data, machine learning projections, and a live AI chat assistant.
+          Your AI-powered fantasy co-manager, built on real NFL data, machine learning projections, and a live AI chat assistant.
         </div>
       </div>
 

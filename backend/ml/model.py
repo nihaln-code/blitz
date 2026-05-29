@@ -228,7 +228,7 @@ def train(df: pd.DataFrame) -> dict:
         X_val   = vl[feat_cols].fillna(0) if len(vl) > 0 else X_train.head(0)
         y_val   = vl["target_fp"] if len(vl) > 0 else y_train.head(0)
 
-        model = XGBRegressor(
+        base_params = dict(
             n_estimators=300,
             max_depth=4,
             learning_rate=0.05,
@@ -241,11 +241,19 @@ def train(df: pd.DataFrame) -> dict:
             n_jobs=-1,
             verbosity=0,
         )
+
+        model = XGBRegressor(**base_params)
         model.fit(X_train, y_train,
                   eval_set=[(X_val, y_val)] if len(X_val) > 0 else None,
                   verbose=False)
 
-        models[pos] = {"model": model, "features": feat_cols}
+        floor_model = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.10, **base_params)
+        floor_model.fit(X_train, y_train, verbose=False)
+
+        ceiling_model = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.90, **base_params)
+        ceiling_model.fit(X_train, y_train, verbose=False)
+
+        models[pos] = {"model": model, "floor_model": floor_model, "ceiling_model": ceiling_model, "features": feat_cols}
 
         if len(X_val) > 0:
             preds    = model.predict(X_val)
@@ -297,9 +305,19 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
     if len(fp_vals) < 2:
         return None
 
+    # Filter out near-DNP games (injury/early exit) before computing volatility.
+    # A QB scoring <8 or a skill player scoring <2 almost certainly didn't play a full game.
+    MIN_HEALTHY_FP = {"QB": 8.0, "RB": 2.0, "WR": 2.0, "TE": 2.0}.get(position, 2.0)
+    healthy_vals = fp_vals[fp_vals >= MIN_HEALTHY_FP]
+    # Fall back to all values if we'd be left with too few
+    if len(healthy_vals) < 2:
+        healthy_vals = fp_vals
+    # Use last 6 healthy games for std (more stable than 4)
+    recent_vals = healthy_vals[-6:]
+
     roll4_fp  = float(np.mean(fp_vals[-4:])) if len(fp_vals) >= 4 else float(np.mean(fp_vals))
     roll2_fp  = float(np.mean(fp_vals[-2:]))
-    roll4_std = float(np.std(fp_vals[-4:])) if len(fp_vals) >= 4 else 0.0
+    roll4_std = float(np.std(recent_vals)) if len(recent_vals) >= 2 else 0.0
 
     td_cols = ["passing_tds", "rushing_tds", "receiving_tds"]
     recent4 = hist.tail(4)
@@ -369,9 +387,15 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
     factors.sort(key=lambda x: abs(x["impact"]), reverse=True)
     factors = factors[:5]
 
-    # Floor/ceiling from recent volatility
-    floor   = round(max(0.0, prediction - 1.5 * roll4_std), 1)
-    ceiling = round(prediction + 1.5 * roll4_std, 1)
+    # Floor/ceiling from quantile regression models (10th and 90th percentile)
+    floor_m   = models[position].get("floor_model")
+    ceiling_m = models[position].get("ceiling_model")
+    if floor_m and ceiling_m:
+        floor   = round(max(0.0, float(floor_m.predict(X)[0])), 1)
+        ceiling = round(float(ceiling_m.predict(X)[0]), 1)
+    else:
+        floor   = round(max(0.0, prediction - 1.5 * roll4_std), 1)
+        ceiling = round(prediction + 1.5 * roll4_std, 1)
 
     # Confidence from cv
     cv = roll4_std / roll4_fp if roll4_fp > 0 else 1.0
