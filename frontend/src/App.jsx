@@ -405,7 +405,7 @@ export default function App() {
 
       {/* Header */}
       <div style={{ borderBottom: "1px solid #1e3a5f", padding: isMobile ? "10px 14px" : "14px 24px", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, background: "#050b18", flexShrink: 0 }}>
-        <button onClick={() => setStarted(false)} title="Back to home" style={{ background: "transparent", border: "none", color: "#334155", cursor: "pointer", fontSize: 16, padding: "0 4px 0 0", lineHeight: 1, flexShrink: 0 }}>⌂</button>
+        <button onClick={() => setStarted(false)} title="Back to home" style={{ background: "transparent", border: "1px solid #1e3a5f", borderRadius: 4, color: "#64748b", cursor: "pointer", fontSize: 11, padding: "4px 8px", fontFamily: "inherit", letterSpacing: 1, flexShrink: 0 }}>← HOME</button>
         <div style={{ fontSize: isMobile ? 18 : 22 }}>🏈</div>
         {!isMobile && <div>
           <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: "#38bdf8" }}>BLITZ</div>
