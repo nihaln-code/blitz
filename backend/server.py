@@ -3,18 +3,24 @@ server.py - FastAPI server exposing the fantasy agent as a REST API
 Local dev: uvicorn server:app --reload --port 8000
 HuggingFace: uvicorn server:app --host 0.0.0.0 --port 7860
 """
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from agents.fantasy_agent import build_fantasy_agent, run_agent
 from langchain_core.messages import HumanMessage, AIMessage
 from data.stats import get_player_stats, search_players
 import requests as http_requests
 import os
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +48,8 @@ class ChatResponse(BaseModel):
 
 
 @api_router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+@limiter.limit("10/minute")
+async def chat(request: Request, req: ChatRequest):
     history = []
     for msg in req.history:
         if msg["role"] == "user":
@@ -54,19 +61,22 @@ async def chat(req: ChatRequest):
 
 
 @api_router.get("/search")
-async def search(q: str):
+@limiter.limit("60/minute")
+async def search(request: Request, q: str):
     if not q or len(q) < 2:
         return []
     return search_players(q)
 
 
 @api_router.get("/player/{name}")
-async def player(name: str):
+@limiter.limit("30/minute")
+async def player(request: Request, name: str):
     return get_player_stats(name)
 
 
 @api_router.get("/news/{player_name}")
-async def get_news(player_name: str):
+@limiter.limit("20/minute")
+async def get_news(request: Request, player_name: str):
     from utils.config import get_settings
     settings = get_settings()
 
