@@ -1,98 +1,98 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi==0.135.1
-uvicorn==0.41.0
-starlette==0.52.1
-slowapi==0.1.9          # per-IP rate limiting
-pydantic==2.12.5
-pydantic-settings==2.13.1
-pydantic_core==2.41.5
+fastapi==0.135.1            # HTTP server framework — defines all /api/* routes
+uvicorn==0.41.0             # ASGI server that runs FastAPI on port 7860
+starlette==0.52.1           # base ASGI toolkit FastAPI is built on; handles middleware/static files
+slowapi==0.1.9              # per-IP rate limiting on API endpoints (protects OpenAI quota)
+pydantic==2.12.5            # validates request/response shapes (ChatRequest, ChatResponse, etc.)
+pydantic-settings==2.13.1   # loads Settings from .env file (OPENAI_API_KEY, NEWSAPI_KEY, etc.)
+pydantic_core==2.41.5       # compiled Rust core that powers pydantic validation
 
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
-openai==2.26.0
-langchain==1.2.10
-langchain-core==1.2.17
-langchain-openai==1.1.10
-langgraph==1.0.10           # ReAct agent graph
-langgraph-checkpoint==4.0.1
-langgraph-prebuilt==1.0.8
-langgraph-sdk==0.3.9
-langsmith==0.7.14           # LangChain tracing / observability
-tiktoken==0.12.0            # OpenAI tokenizer (used internally by langchain)
+openai==2.26.0              # OpenAI SDK — GPT-4o calls in /api/chat and /api/news AI signal
+langchain==1.2.10           # LLM orchestration framework used to build the fantasy agent
+langchain-core==1.2.17      # core abstractions: tools, messages, runnables used by the agent
+langchain-openai==1.1.10    # connects LangChain to OpenAI (ChatOpenAI class in fantasy_agent.py)
+langgraph==1.0.10           # builds the ReAct agent graph that powers the chat loop
+langgraph-checkpoint==4.0.1 # saves/restores agent state between steps in the graph
+langgraph-prebuilt==1.0.8   # provides create_react_agent() used in fantasy_agent.py
+langgraph-sdk==0.3.9        # LangGraph runtime client (internal dep of langgraph)
+langsmith==0.7.14           # LangChain tracing and observability (auto-enabled if key is set)
+tiktoken==0.12.0            # OpenAI tokenizer — counts tokens for context window management
 
 # ── ML / Data ─────────────────────────────────────────────────────────────────
-xgboost==3.2.0              # fantasy point projection models
-shap==0.51.0                # explains XGBoost predictions (top-5 factors)
-scikit-learn==1.8.0         # preprocessing utilities
-numpy==2.4.2
-pandas==3.0.1
-scipy==1.17.1               # quantile regression for floor/ceiling projections
-pyarrow==23.0.1             # columnar data format (pandas parquet backend)
+xgboost==3.2.0              # trains and runs the 4 position projection models (QB/RB/WR/TE)
+shap==0.51.0                # explains XGBoost predictions — produces the top-5 factor breakdown
+scikit-learn==1.8.0         # mean_absolute_error for model validation during training
+numpy==2.4.2                # array math used throughout ml/model.py and data/stats.py
+pandas==3.0.1               # core DataFrame library — all NFL stat loading and feature engineering
+scipy==1.17.1               # used by XGBoost quantile models for floor/ceiling projections
+pyarrow==23.0.1             # reads/writes parquet files; pandas uses it to load NFL data
 
 # ── NFL Data ──────────────────────────────────────────────────────────────────
-nfl_data_py==0.3.2          # weekly NFL stats and injury reports
-nflreadpy==0.1.5            # lower-level NFL data reader
+nfl_data_py==0.3.2          # loads weekly player stats and injury reports (2022–2025 seasons)
+nflreadpy==0.1.5            # lower-level NFL data reader used alongside nfl_data_py in stats.py
 
 # ── Networking / HTTP ─────────────────────────────────────────────────────────
-requests==2.32.5            # NewsAPI calls
-requests-toolbelt==1.0.0
-httpx==0.28.1               # async HTTP (used by openai/langchain internals)
-httpx-sse==0.4.3
-aiohttp==3.13.3
-aiohappyeyeballs==2.6.1
-aiosignal==1.4.0
-anyio==4.12.1
-sniffio==1.3.1
-h11==0.16.0
-httpcore==1.0.9
-idna==3.11
-urllib3==2.6.3
-certifi==2026.2.25
-charset-normalizer==3.4.5
+requests==2.32.5            # makes HTTP calls to NewsAPI in server.py and fantasy_agent.py
+requests-toolbelt==1.0.0    # multipart/streaming utilities for requests (required by langsmith)
+httpx==0.28.1               # async HTTP client used internally by the OpenAI SDK
+httpx-sse==0.4.3            # server-sent events support for httpx (OpenAI streaming responses)
+aiohttp==3.13.3             # async HTTP client used internally by LangChain
+aiohappyeyeballs==2.6.1     # happy eyeballs (dual-stack) connection algorithm for aiohttp
+aiosignal==1.4.0            # async signal/callback list used by aiohttp
+anyio==4.12.1               # async I/O abstraction layer required by FastAPI and Starlette
+sniffio==1.3.1              # detects which async library is running (anyio dep)
+h11==0.16.0                 # pure-Python HTTP/1.1 parser used by httpcore and uvicorn
+httpcore==1.0.9             # low-level HTTP connection pool underlying httpx
+idna==3.11                  # international domain name encoding used by requests/httpx
+urllib3==2.6.3              # HTTP connection pooling used by requests
+certifi==2026.2.25          # Mozilla CA certificate bundle for HTTPS verification
+charset-normalizer==3.4.5   # detects and normalizes text encodings in HTTP responses
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
-python-dotenv==1.2.2        # loads .env file
-orjson==3.11.7              # fast JSON serialization (FastAPI uses this)
-filelock==3.25.0
-fsspec==2026.2.0
-frozenlist==1.8.0
-multidict==6.7.1
-propcache==0.4.1
-yarl==1.23.0
+python-dotenv==1.2.2        # reads .env file into environment variables for pydantic-settings
+orjson==3.11.7              # fast JSON serializer; FastAPI uses it automatically when installed
+filelock==3.25.0            # file-based locking used by huggingface_hub when downloading data
+fsspec==2026.2.0            # filesystem abstraction used by pandas when reading remote parquet
+frozenlist==1.8.0           # immutable list type used internally by aiohttp
+multidict==6.7.1            # multi-value dict for HTTP headers/params used by aiohttp/yarl
+propcache==0.4.1            # property caching utility used by yarl
+yarl==1.23.0                # URL parsing and manipulation library used by aiohttp
 
 # ── LangChain internal dependencies ───────────────────────────────────────────
-jsonpatch==1.33
-jsonpointer==3.0.0
-marshmallow==3.26.2
-dataclasses-json==0.6.7
-tenacity==9.1.4
-PyYAML==6.0.3
-networkx==3.6.1
-sortedcontainers==2.4.0
+jsonpatch==1.33             # applies JSON patch operations to LangChain message state
+jsonpointer==3.0.0          # JSON pointer syntax (RFC 6901) used by jsonpatch
+marshmallow==3.26.2         # object serialization library used by dataclasses-json
+dataclasses-json==0.6.7     # serializes Python dataclasses to/from JSON in LangChain messages
+tenacity==9.1.4             # retry logic with backoff used by LangChain for API call failures
+PyYAML==6.0.3               # YAML parsing used by LangChain for config and prompt templates
+networkx==3.6.1             # graph data structures used by LangGraph to build the agent graph
+sortedcontainers==2.4.0     # sorted list/dict/set used by LangGraph for priority scheduling
 
 # ── Logging / CLI ─────────────────────────────────────────────────────────────
-loguru==0.7.3               # structured logging
-colorlog==6.10.1            # colored log output
-colorama==0.4.6             # ANSI colors on Windows
-rich==14.3.3                # rich terminal output
-typer==0.24.1               # CLI framework
-click==8.3.1
-Jinja2==3.1.6
-MarkupSafe==3.0.3
-markdown-it-py==4.0.0
-Pygments==2.19.2
+loguru==0.7.3               # structured logging used in fantasy_agent.py and main.py
+colorlog==6.10.1            # adds color to log level output in the terminal
+colorama==0.4.6             # enables ANSI color codes on Windows terminals
+rich==14.3.3                # rich terminal output (tables, tracebacks) used by typer
+typer==0.24.1               # builds the interactive CLI in main.py for local agent testing
+click==8.3.1                # CLI argument parsing library that typer is built on
+Jinja2==3.1.6               # template engine used by LangChain for prompt templates
+MarkupSafe==3.0.3           # escapes strings safely in Jinja2 templates
+markdown-it-py==4.0.0       # Markdown parser used by rich for rendering formatted output
+Pygments==2.19.2            # syntax highlighting used by rich for code blocks in terminal
 
 # ── Misc runtime deps ─────────────────────────────────────────────────────────
-six==1.17.0
-python-dateutil==2.9.0.post0
-platformdirs==4.9.4
-distro==1.9.0
-annotated-types==0.7.0
-typing_extensions==4.15.0
-typing-inspect==0.9.0
-tzdata==2025.3
-wrapt==2.1.2
-jiter==0.13.0
-tqdm==4.67.3
-joblib==1.5.3
-regex==2026.2.28
-huggingface_hub==1.6.0      # nfl_data_py downloads parquet files via HF
+six==1.17.0                 # Python 2/3 compatibility shim required by python-dateutil
+python-dateutil==2.9.0.post0 # flexible date parsing used by pandas for timestamp columns
+platformdirs==4.9.4         # finds OS-appropriate cache/config dirs used by huggingface_hub
+distro==1.9.0               # detects Linux distro; used by the OpenAI SDK for user-agent headers
+annotated-types==0.7.0      # typing annotations (Gt, Lt, etc.) used by pydantic validators
+typing_extensions==4.15.0   # backports newer typing features to Python 3.11 for pydantic/langchain
+typing-inspect==0.9.0       # runtime type introspection used by dataclasses-json
+tzdata==2025.3              # IANA timezone database used by pandas for timezone-aware datetimes
+wrapt==2.1.2                # decorator utilities used by LangChain for deprecation warnings
+jiter==0.13.0               # fast incremental JSON parser used by the OpenAI SDK
+tqdm==4.67.3                # progress bars shown during XGBoost training and data loading
+joblib==1.5.3               # parallel processing and caching used by scikit-learn
+regex==2026.2.28            # full-featured regex library required by tiktoken for tokenization
+huggingface_hub==1.6.0      # downloads parquet data files that nfl_data_py fetches from HF datasets

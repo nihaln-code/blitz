@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import re                       # strips dots/spaces for name normalization
+import difflib                  # fuzzy player name matching fallback
 import requests as _requests
 from datetime import datetime, timedelta
 
@@ -20,6 +22,36 @@ print("Loading NFL data...")
 _weekly = nfl.load_player_stats([2022, 2023, 2024, 2025]).to_pandas()
 _weekly["player_display_name"] = _weekly["player_display_name"].str.lower()
 print(f"Loaded {len(_weekly)} rows of NFL stats.")
+
+_all_player_names: list[str] = []  # populated after load, used by fuzzy resolver
+
+def _norm(s: str) -> str:
+    """Strip dots and collapse whitespace for name comparison (handles J.J. vs JJ)."""
+    return re.sub(r"[.\s]+", "", s.lower())
+
+def _resolve_player_name(raw: str) -> str:
+    """
+    Resolve a potentially misspelled or abbreviated name to the best match in the dataset.
+    Strategy: 1) direct substring  2) dot-stripped normalization  3) difflib fuzzy match
+    """
+    name = raw.lower().strip()
+
+    # 1. Fast path: direct substring match already works
+    if not _weekly[_weekly["player_display_name"].str.contains(name, na=False, regex=False)].empty:
+        return name
+
+    # 2. Normalize: strip dots/spaces so "jj mccarthy" matches "j.j. mccarthy"
+    norm_input = _norm(name)
+    for player_name in _all_player_names:
+        if _norm(player_name) == norm_input:
+            return player_name
+
+    # 3. Difflib: catch typos with >60% similarity
+    matches = difflib.get_close_matches(name, _all_player_names, n=1, cutoff=0.6)
+    if matches:
+        return matches[0]
+
+    return name
 
 # ── Train or load model ────────────────────────────────────────────────────────
 if models_exist():
@@ -36,6 +68,9 @@ else:
 print("Building opponent defense rankings...")
 _opp_defense = _build_opp_defense_table(_weekly)
 print("Defense table ready.")
+
+# Populate after all data is loaded so the fuzzy resolver has the full name list
+_all_player_names = _weekly["player_display_name"].unique().tolist()
 
 # ── ESPN injury lookup with 4-hour cache ──────────────────────────────────────
 _espn_cache: dict = {}
@@ -128,8 +163,8 @@ def get_injury_status(player_name: str) -> str:
 
 def get_player_stats(player_name: str) -> dict:
     """Returns ML-powered projection with SHAP factors and real injury status."""
-    name = player_name.lower().strip()
-    all_games = _weekly[_weekly["player_display_name"].str.contains(name, na=False)].copy()
+    name = _resolve_player_name(player_name)
+    all_games = _weekly[_weekly["player_display_name"].str.contains(name, na=False, regex=False)].copy()
 
     if all_games.empty:
         return {"found": False, "player": player_name}
@@ -233,9 +268,9 @@ def get_player_stats(player_name: str) -> dict:
 
 
 def search_players(query: str, limit: int = 12) -> list[dict]:
-    """Search for players by partial name match."""
-    q       = query.lower().strip()
-    matches = _weekly[_weekly["player_display_name"].str.contains(q, na=False)]
+    """Search for players by partial name match with fuzzy fallback."""
+    q       = _resolve_player_name(query)
+    matches = _weekly[_weekly["player_display_name"].str.contains(q, na=False, regex=False)]
 
     if matches.empty:
         return []

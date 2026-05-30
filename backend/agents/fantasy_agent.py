@@ -40,12 +40,9 @@ Recent Games:
 @tool
 def check_injury_status(player_name: str) -> str:
     """Check a player's current injury status and practice participation."""
-    return f"""
-🏥 {player_name} Injury Report
-Status: Active (placeholder)
-Practice: Full Participation
-Note: Add your NEWSAPI_KEY to .env and connect InjuryTracker for real data.
-"""
+    from data.stats import get_injury_status
+    status = get_injury_status(player_name)
+    return f"🏥 {player_name} injury status: {status}"
 
 @tool
 def research_player_news(player_name: str) -> str:
@@ -77,18 +74,54 @@ def research_player_news(player_name: str) -> str:
 @tool
 def analyze_trade(giving_players: str, receiving_players: str) -> str:
     """
-    Analyze a trade offer. Pass giving_players and receiving_players as
-    comma-separated strings e.g. 'CeeDee Lamb, Davante Adams'.
+    Analyze a trade offer using real ML projections for every player involved.
+    Pass giving_players and receiving_players as comma-separated name strings.
     """
-    giving = [p.strip() for p in giving_players.split(",")]
-    receiving = [p.strip() for p in receiving_players.split(",")]
-    return f"""
-🔄 Trade Analysis
-Trading Away: {', '.join(giving)}
-Receiving: {', '.join(receiving)}
+    from data.stats import get_player_stats
 
-Placeholder analysis - connect the ML model for real projected values.
-General advice: Consider remaining schedule, injury history, and positional need.
+    def summarize(name: str) -> tuple[str, float, str]:
+        """Returns (formatted line, projected_pts, position)."""
+        stats = get_player_stats(name)
+        if not stats["found"]:
+            return f"  {name}: not found", 0.0, "?"
+        inj = stats["injury_status"]
+        inj_note = f" ⚠️ {inj}" if inj not in ("Healthy", "Active", "—", "") else ""
+        line = (
+            f"  {stats['player']} ({stats['position']}, {stats['team']}) — "
+            f"{stats['projected_points']} pts/wk | "
+            f"Floor {stats['floor']} / Ceiling {stats['ceiling']} | "
+            f"Confidence: {stats['confidence']}{inj_note}"
+        )
+        return line, stats["projected_points"], stats["position"]
+
+    giving_names = [p.strip() for p in giving_players.split(",")]
+    receiving_names = [p.strip() for p in receiving_players.split(",")]
+
+    giving_results   = [summarize(p) for p in giving_names]
+    receiving_results = [summarize(p) for p in receiving_names]
+
+    giving_pts   = sum(r[1] for r in giving_results)
+    receiving_pts = sum(r[1] for r in receiving_results)
+    giving_pos   = [r[2] for r in giving_results]
+    receiving_pos = [r[2] for r in receiving_results]
+    diff = receiving_pts - giving_pts
+
+    value_line = (
+        f"Net projected value: {'+' if diff >= 0 else ''}{diff:.1f} pts/wk "
+        f"({'receiving side wins' if diff >= 0 else 'giving side wins on raw points'})"
+    )
+
+    return f"""🔄 Trade Data
+
+Trading Away:
+{chr(10).join(r[0] for r in giving_results)}
+
+Receiving:
+{chr(10).join(r[0] for r in receiving_results)}
+
+{value_line}
+Positions leaving roster: {', '.join(giving_pos)}
+Positions arriving:       {', '.join(receiving_pos)}
 """
 
 @tool
@@ -110,18 +143,22 @@ Connect ml/performance_model.py and tools/roster_optimizer.py for real LP-optimi
 # Build the Agent
 # ─────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are an expert fantasy football AI analyst. You help managers make 
-the best decisions for their team using data, projections, and news analysis.
+SYSTEM_PROMPT = """You are a sharp, opinionated fantasy football analyst. You give strong, \
+data-backed verdicts — not hedged non-answers.
 
-You have tools to:
-- Project player fantasy point output
-- Check injury status and practice participation
-- Research news and press conference quotes
-- Analyze trade offers
-- Optimize lineups
+RULES:
+1. Always pull real projection data before advising on any player or trade.
+2. For trades: end with a clear "MAKE THIS TRADE" or "DO NOT MAKE THIS TRADE" verdict.
+3. Factor in positional scarcity. Losing a starting QB when the backup is unproven is almost \
+always a losing move — call it out explicitly.
+4. If the numbers show a trade is lopsided, say so directly. Do not soften it.
+5. Never say "consider whether..." — give a direct answer with the reasoning behind it.
+6. Account for roster context the user provides (backup players, positional depth, team needs).
+7. Back every verdict with specific projected points from the tools.
 
-Always check injury status before recommending a player to start.
-Be direct with recommendations and cite specific reasons."""
+PLAYER NAME HANDLING:
+- If a name lookup fails, retry with common variations: drop punctuation, try last name only, \
+try first name only. Do not give up after one failed lookup."""
 
 
 def build_fantasy_agent():
