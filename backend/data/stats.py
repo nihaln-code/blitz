@@ -70,7 +70,8 @@ _opp_defense = _build_opp_defense_table(_weekly)
 print("Defense table ready.")
 
 # Populate after all data is loaded so the fuzzy resolver has the full name list
-_all_player_names = _weekly["player_display_name"].unique().tolist()
+# dropna() excludes NaN entries (pandas stores missing strings as float NaN)
+_all_player_names = _weekly["player_display_name"].dropna().unique().tolist()
 
 # ── ESPN injury lookup with 4-hour cache ──────────────────────────────────────
 _espn_cache: dict = {}
