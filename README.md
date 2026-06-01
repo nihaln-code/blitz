@@ -15,8 +15,9 @@
 
 ##  Demo
 
-<!-- Add a screenshot or GIF here -->
-> _Screenshot or GIF coming soon_
+<img width="1914" height="911" alt="image" src="https://github.com/user-attachments/assets/d62bab71-dd67-4716-bc2f-1e6f846054d8" />
+<img width="1919" height="914" alt="image" src="https://github.com/user-attachments/assets/15791471-9aa3-4c69-bd4c-4018f9af9318" />
+
 
 ---
 
