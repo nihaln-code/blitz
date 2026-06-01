@@ -95,7 +95,7 @@ function WelcomePage({ onStart }) {
           { icon: "🔍", title: "Waiver Wire", desc: "Search any NFL player and get instant projections, floor, ceiling, and injury status." },
           { icon: "📉", title: "Floor & Ceiling", desc: "10th and 90th percentile outcomes per player, built from real game volatility, not guesswork." },
           { icon: "💬", title: "AI Co-Manager", desc: "Ask Blitz about trades, lineup decisions, or breakout candidates available 24/7." },
-        ].map(f => (
+        ].map(f => (  
           <div key={f.title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{f.icon}</span>
             <div>
