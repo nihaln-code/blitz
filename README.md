@@ -9,7 +9,7 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![HuggingFace](https://img.shields.io/badge/HuggingFace_Spaces-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)
 
-**[ Live Demo](https://huggingface.co/spaces/YOUR_USERNAME/blitz)** <!-- update this link -->
+**[ Live Demo](https://huggingface.co/spaces/NihalNimmagadda/blitz)** <!-- update this link -->
 
 ---
 
