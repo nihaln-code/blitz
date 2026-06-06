@@ -1,3 +1,12 @@
+---
+title: Blitz
+emoji: ??
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 #  Blitz — AI Fantasy Football Assistant
 
 > AI-powered projections, explainable predictions, and a natural language agent to help fantasy managers make smarter decisions every week.
