@@ -1,18 +1,32 @@
 import { useState, useEffect, useRef } from "react";
 import { auth, onAuthStateChanged, signInAnonymously, saveRoster, loadRoster } from "./firebase";
+
 function getAPI() {
-  // Local dev
   if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8000/api`;
   }
-  // HuggingFace embeds the app in an iframe — use the actual Space URL directly
   if (window.location.hostname.includes("huggingface.co")) {
     return "https://nihalnimmagadda-blitz.hf.space/api";
   }
-  // Direct Space URL or self-hosted
   return `${window.location.protocol}//${window.location.hostname}/api`;
 }
 const API = getAPI();
+
+// 3-level surface system, 3-level text system
+const C = {
+  bg:      "#07100e",   // deepest: page, header bar
+  surface: "#0d1a16",   // sidebar, panel backgrounds
+  raised:  "#142620",   // cards, stat boxes, selected rows
+  hover:   "#1a3028",
+  border:  "#1e3028",
+  accent:  "#10b981",   // emerald primary
+  green:   "#34c97a",   // buy signal (lighter warm green — distinct from primary)
+  red:     "#ef4444",
+  amber:   "#fbbf24",
+  t1:      "#f0faf6",   // primary text (subtle green-white)
+  t2:      "#8aaa9e",   // secondary: names, values, body
+  t3:      "#4e7068",   // dim: labels, metadata, section headers
+};
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -30,13 +44,13 @@ function SimpleMarkdown({ text }) {
     <div>
       {lines.map((line, i) => {
         if (line.startsWith("### "))
-          return <div key={i} style={{ color: "#4f6ef7", fontWeight: 700, fontSize: 12, letterSpacing: 1, marginTop: 10, marginBottom: 4 }}>{line.slice(4)}</div>;
+          return <div key={i} style={{ color: C.accent, fontWeight: 700, fontSize: 12, letterSpacing: 1, marginTop: 10, marginBottom: 4 }}>{line.slice(4)}</div>;
         if (line.startsWith("**") && line.endsWith("**") && line.length > 4)
-          return <div key={i} style={{ color: "#f1f5f9", fontWeight: 700, marginBottom: 2 }}>{line.slice(2, -2)}</div>;
+          return <div key={i} style={{ color: C.t1, fontWeight: 700, marginBottom: 2 }}>{line.slice(2, -2)}</div>;
         if (line.startsWith("- ") || line.startsWith("• "))
           return (
             <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3 }}>
-              <span style={{ color: "#4f6ef7", flexShrink: 0 }}>·</span>
+              <span style={{ color: C.accent, flexShrink: 0 }}>·</span>
               <span>{renderInline(line.slice(2))}</span>
             </div>
           );
@@ -51,9 +65,25 @@ function renderInline(text) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
-      ? <strong key={i} style={{ color: "#f1f5f9" }}>{part.slice(2, -2)}</strong>
+      ? <strong key={i} style={{ color: C.t1 }}>{part.slice(2, -2)}</strong>
       : part
   );
+}
+
+function TypewriterMessage({ text }) {
+  const [displayed, setDisplayed] = useState("");
+  useEffect(() => {
+    setDisplayed("");
+    let i = 0;
+    const speed = Math.max(4, Math.min(18, Math.floor(4000 / text.length)));
+    const id = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) clearInterval(id);
+    }, speed);
+    return () => clearInterval(id);
+  }, [text]);
+  return <SimpleMarkdown text={displayed} />;
 }
 
 function BoltIcon({ size = 24, color = "currentColor" }) {
@@ -82,41 +112,33 @@ function SearchIcon({ size = 20, color = "currentColor" }) {
 
 function WelcomePage({ onStart }) {
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#0d0f18", height: "100dvh", width: "100vw", color: "#e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 24px", overflow: "hidden", position: "relative" }}>
+    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", color: C.t1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 24px", overflow: "hidden", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-        .heading { font-family: 'Space Grotesk', sans-serif; }
-        .welcome-btn:hover { background: #3b5ce4 !important; transform: translateY(-1px); }
+        .blitz-font { font-family: 'Space Grotesk', sans-serif; }
+        .welcome-btn:hover { background: #059669 !important; transform: translateY(-1px); }
         .welcome-btn:active { transform: translateY(1px); }
       `}</style>
-
 
       {/* Noise/grain texture */}
       <div style={{ position: "absolute", inset: 0, opacity: 0.045, pointerEvents: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`, backgroundSize: "256px 256px" }} />
 
       {/* Logo */}
       <div style={{ animation: "fadeUp 0.5s ease both", textAlign: "center", marginBottom: 10 }}>
-        <div style={{ marginBottom: 8 }}><BoltIcon size={36} color="#4f6ef7" /></div>
-        <div className="heading" style={{ fontSize: 42, fontWeight: 700, letterSpacing: 10, color: "#4f6ef7" }}>BLITZ</div>
-        <div className="heading" style={{ fontSize: 10, letterSpacing: 5, color: "#334155", marginTop: 6 }}>FANTASY FOOTBALL ASSISSTANT</div>
-      </div>
-
-      {/* Tagline */}
-      <div style={{ animation: "fadeUp 0.5s 0.12s ease both", textAlign: "center", marginBottom: 20, maxWidth: 500 }}>
-        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.8 }}>
-          Built on 4 years of NFL data so you stop making decisions on vibes.
-        </div>
+        <div style={{ marginBottom: 8 }}><BoltIcon size={36} color={C.accent} /></div>
+        <div className="blitz-font" style={{ fontSize: 42, fontWeight: 700, letterSpacing: 10, color: C.accent }}>BLITZ</div>
+        <div style={{ fontSize: 11, letterSpacing: 4, color: C.t3, marginTop: 6 }}>FANTASY FOOTBALL ASSISTANT</div>
       </div>
 
       {/* Staggered feature cards */}
       <div style={{ width: "100%", maxWidth: 460, marginBottom: 24 }}>
         {[
-          { title: "Projections",  desc: "See the exact reasoning behind each number.",                       accent: "#4f6ef7", delay: "0.18s" },
-          { title: "Floor & Ceiling", desc: "10th and 90th percentile outcomes so you know the realistic range, not just the average.",              accent: "#34c97a", delay: "0.26s" },
-          { title: "Waiver Wire",     desc: "Search any player and get their projection, floor and ceiling",                    accent: "#4f6ef7", delay: "0.34s" },
-          { title: "AI Co-Manager",   desc: "Ask about a trade or lineup decision. It uses your actual roster and real projections to answer.",       accent: "#34c97a", delay: "0.42s" },
+          { title: "Projections",     desc: "See the exact reasoning behind each number.",                                                                     accent: C.accent, delay: "0.18s" },
+          { title: "Floor & Ceiling", desc: "10th and 90th percentile outcomes so you know the realistic range, not just the average.",                        accent: C.green,  delay: "0.26s" },
+          { title: "Waiver Wire",     desc: "Search any player and get their projection, floor and ceiling.",                                                  accent: C.accent, delay: "0.34s" },
+          { title: "AI Co-Manager",   desc: "Ask about a trade or lineup decision. It uses your actual roster and real projections to answer.",                 accent: C.green,  delay: "0.42s" },
         ].map((f, i) => (
           <div key={f.title} style={{
             borderLeft: `2px solid ${f.accent}`,
@@ -126,15 +148,15 @@ function WelcomePage({ onStart }) {
             marginRight: i % 2 === 0 ? 28 : 0,
             animation: `fadeUp 0.5s ${f.delay} ease both`,
           }}>
-            <div className="heading" style={{ fontSize: 10, fontWeight: 700, color: f.accent, letterSpacing: 2, marginBottom: 4 }}>{f.title.toUpperCase()}</div>
-            <div style={{ fontSize: 12, fontWeight: 400, color: "#475569", lineHeight: 1.6 }}>{f.desc}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: f.accent, letterSpacing: 2, marginBottom: 4, textTransform: "uppercase" }}>{f.title}</div>
+            <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>{f.desc}</div>
           </div>
         ))}
       </div>
 
       {/* CTA */}
       <div style={{ animation: "fadeUp 0.5s 0.52s ease both", textAlign: "center" }}>
-        <button onClick={onStart} className="welcome-btn heading" style={{ background: "#4f6ef7", border: "none", color: "#fff", padding: "10px 28px", borderRadius: 4, cursor: "pointer", fontSize: 13, fontWeight: 700, letterSpacing: 3, boxShadow: "none", transition: "all 0.2s" }}>
+        <button onClick={onStart} className="welcome-btn blitz-font" style={{ background: C.accent, border: "none", color: "#fff", padding: "10px 28px", borderRadius: 4, cursor: "pointer", fontSize: 13, fontWeight: 700, letterSpacing: 3, transition: "all 0.2s" }}>
           GET STARTED →
         </button>
       </div>
@@ -163,10 +185,8 @@ function defaultPlayer(name, pos) {
     trend: 0,
     injury: "—",
     news: "hold",
-    // no salary — it's fake
   };
 }
-
 
 const newsColors = { buy: "#34c97a", hold: "#fbbf24", sell: "#ef4444" };
 const newsLabels = { buy: "↑ Buy", hold: "→ Hold", sell: "↓ Sell" };
@@ -183,30 +203,30 @@ function combineSignal(newsSig, trend, injury) {
   const injured = ["Out", "Ir", "Doubtful"].includes(injury);
   if (injured) return "sell";
   const trendSig = trend >= 2.5 ? "buy" : trend <= -2.5 ? "sell" : "hold";
-  if (newsSig === "sell") return "sell";               // injury news always sells
-  if (newsSig === "buy" && trendSig === "sell") return "hold"; // conflicting — be cautious
+  if (newsSig === "sell") return "sell";
+  if (newsSig === "buy" && trendSig === "sell") return "hold";
   if (newsSig === "buy" || trendSig === "buy") return "buy";
   if (trendSig === "sell") return "sell";
   return "hold";
 }
 
 function injuryColor(injury) {
-  if (!injury || injury === "—") return "#475569";
-  if (injury === "Healthy") return "#34c97a";
-  if (["Out", "Ir", "Doubtful"].includes(injury)) return "#ef4444";
-  return "#fbbf24";
+  if (!injury || injury === "—") return C.t3;
+  if (injury === "Healthy") return C.green;
+  if (["Out", "Ir", "Doubtful"].includes(injury)) return C.red;
+  return C.amber;
 }
 
 function DropModal({ player, onConfirm, onCancel }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-      <div style={{ background: "#111422", border: "1px solid #ef4444", borderRadius: 12, padding: 28, width: "min(340px, 90vw)", textAlign: "center" }}>
-        <div style={{ marginBottom: 12 }}><WarningIcon size={28} color="#ef4444" /></div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 }}>Drop {player.name}?</div>
-        <div style={{ fontSize: 11, color: "#64748b", marginBottom: 24 }}>This will remove them from your roster permanently.</div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+      <div style={{ background: C.raised, border: `1px solid ${C.red}`, borderRadius: 12, padding: 28, width: "min(340px, 90vw)", textAlign: "center" }}>
+        <div style={{ marginBottom: 12 }}><WarningIcon size={28} color={C.red} /></div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginBottom: 8 }}>Drop {player.name}?</div>
+        <div style={{ fontSize: 12, color: C.t3, marginBottom: 24 }}>This will remove them from your roster permanently.</div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button onClick={onCancel} style={{ background: "transparent", border: "1px solid #1e2845", color: "#94a3b8", padding: "8px 20px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>CANCEL</button>
-          <button onClick={onConfirm} style={{ background: "#ef4444", border: "none", color: "#fff", padding: "8px 20px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700 }}>DROP PLAYER</button>
+          <button onClick={onCancel} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.t2, padding: "8px 20px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>Cancel</button>
+          <button onClick={onConfirm} style={{ background: C.red, border: "none", color: "#fff", padding: "8px 20px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}>Drop Player</button>
         </div>
       </div>
     </div>
@@ -221,7 +241,7 @@ export default function App() {
   const [roster, setRoster] = useState([]);
   const [selected, setSelected] = useState(defaultPlayer("", "QB"));
   const [tab, setTab] = useState("roster");
-  const [showDetail, setShowDetail] = useState(false); // mobile: toggle between list and detail
+  const [showDetail, setShowDetail] = useState(false);
 
   const [playerNews, setPlayerNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -239,8 +259,8 @@ export default function App() {
     { role: "ai", text: "What do you need? I can break down a trade, check a player's projection, or tell you who to start." }
   ]);
   const [loading, setLoading] = useState(false);
+  const [streamingIdx, setStreamingIdx] = useState(null);
 
-  // Firebase: sign in anonymously, load saved roster
   const _saveTimer = useRef(null);
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -267,7 +287,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Firebase: save roster to Firestore on change (debounced 1.5s)
   useEffect(() => {
     if (!userId || !rosterLoaded || roster.length === 0) return;
     if (_saveTimer.current) clearTimeout(_saveTimer.current);
@@ -276,11 +295,10 @@ export default function App() {
     }, 1500);
   }, [roster, userId, rosterLoaded]);
 
-  // Fetch projections for roster players that are missing data (runs when roster names change)
   const _rosterKey = roster.map(p => p.name).join("|");
   useEffect(() => {
     roster.forEach(async (p) => {
-      if (p.proj !== null) return; // already has fresh data
+      if (p.proj !== null) return;
       try {
         const res = await fetch(`${API}/player/${encodeURIComponent(p.name)}`);
         const data = await res.json();
@@ -290,7 +308,7 @@ export default function App() {
             sampleWeeks: data.sample_weeks,
             trend: data.trend ?? 0,
             confidence: data.confidence,
-            confidenceColor: data.confidence_color ?? "#34c97a",
+            confidenceColor: data.confidence_color ?? C.green,
             factors: data.factors ?? [],
             injury: data.injury_status ?? "—",
             floor: data.floor ?? null,
@@ -305,7 +323,6 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_rosterKey]);
 
-  // Fetch news + derive injury status dynamically
   useEffect(() => {
     if (!selected?.name) return;
     setNewsLoading(true);
@@ -357,7 +374,7 @@ export default function App() {
       ceiling: addingPlayer.ceiling ?? null,
       trend: addingPlayer.trend ?? 0,
       confidence: addingPlayer.confidence ?? null,
-      confidenceColor: addingPlayer.confidence_color ?? "#34c97a",
+      confidenceColor: addingPlayer.confidence_color ?? C.green,
       factors: addingPlayer.factors ?? [],
       injury: addingPlayer.injury_status ?? "—",
       sampleWeeks: addingPlayer.sample_weeks ?? null,
@@ -384,6 +401,11 @@ export default function App() {
   };
 
   const apiHistoryRef = useRef([]);
+  const chatBottomRef = useRef(null);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!chatInput.trim()) return;
@@ -404,9 +426,9 @@ export default function App() {
         { role: "user", content: fullMsg },
         { role: "assistant", content: data.response },
       ];
-      setMessages(m => [...m, { role: "ai", text: data.response }]);
+      setMessages(m => { const next = [...m, { role: "ai", text: data.response }]; setStreamingIdx(next.length - 1); return next; });
     } catch {
-      setMessages(m => [...m, { role: "ai", text: "Could not reach backend." }]);
+      setMessages(m => { const next = [...m, { role: "ai", text: "Could not reach backend." }]; setStreamingIdx(next.length - 1); return next; });
     }
     setLoading(false);
   };
@@ -414,62 +436,65 @@ export default function App() {
   if (!started) return <WelcomePage onStart={() => setStarted(true)} />;
 
   if (!rosterLoaded) return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#0d0f18", height: "100dvh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <style>{`@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }`}</style>
-      <BoltIcon size={28} color="#4f6ef7" />
-      <div style={{ fontSize: 11, color: "#4f6ef7", letterSpacing: 3 }}>LOADING YOUR ROSTER...</div>
+      <BoltIcon size={28} color={C.accent} />
+      <div style={{ fontSize: 11, color: C.accent, letterSpacing: 3 }}>LOADING YOUR ROSTER...</div>
       <div style={{ display: "flex", gap: 6 }}>
-        {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#4f6ef7", animation: `pulse 1s ${i * 0.2}s infinite` }} />)}
+        {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent, animation: `pulse 1s ${i * 0.2}s infinite` }} />)}
       </div>
     </div>
   );
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#0d0f18", height: "100vh", width: "100vw", color: "#e2e8f0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100vh", width: "100vw", color: C.t1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { width: 100%; height: 100%; overflow: hidden; }
-        @media (max-width: 767px) {
-          html, body, #root { height: 100dvh; }
-        }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0d0f18; } ::-webkit-scrollbar-thumb { background: #1e2845; border-radius: 3px; }
-        .heading { font-family: 'Space Grotesk', sans-serif; }
+        @media (max-width: 767px) { html, body, #root { height: 100dvh; } }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: ${C.bg}; }
+        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
+        .blitz-font { font-family: 'Space Grotesk', sans-serif; }
         .pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
         @keyframes slideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         .slide-in { animation: slideIn 0.2s ease; }
-        .player-row:hover { background: #111726 !important; }
-        .search-result:hover { background: #141928 !important; }
-        input:focus { outline: none; border-color: #4f6ef7 !important; }
+        .player-row:hover { background: ${C.hover} !important; }
+        .search-result:hover { background: ${C.hover} !important; }
+        input:focus { outline: none; border-color: ${C.accent} !important; }
+        button:focus-visible { outline: 2px solid ${C.accent}; outline-offset: 2px; }
+        a:focus-visible { outline: 2px solid ${C.accent}; outline-offset: 2px; border-radius: 2px; }
+        .chat-chip:hover { border-color: ${C.accent} !important; color: ${C.accent} !important; }
       `}</style>
 
       {dropConfirm && <DropModal player={dropConfirm} onConfirm={handleDropConfirm} onCancel={() => setDropConfirm(null)} />}
 
       {addingPlayer && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: "#111422", border: "1px solid #1e2845", borderRadius: 12, padding: 28, width: "min(440px, 95vw)" }} className="slide-in">
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#4f6ef7", letterSpacing: 2, marginBottom: 4 }}>ADD PLAYER</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", marginBottom: 4 }}>{addingPlayer.player}</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 20 }}>
+          <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 12, padding: 28, width: "min(440px, 95vw)" }} className="slide-in">
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 2, marginBottom: 4, textTransform: "uppercase" }}>Add Player</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.t1, marginBottom: 4 }}>{addingPlayer.player}</div>
+            <div style={{ fontSize: 12, color: C.t3, marginBottom: 20 }}>
               {addingPlayer.position} · {addingPlayer.team} · {addingPlayer.projected_points} proj pts
             </div>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 12 }}>SELECT A PLAYER TO DROP (OPTIONAL)</div>
+            <div style={{ fontSize: 11, letterSpacing: 1, color: C.t3, marginBottom: 12, textTransform: "uppercase" }}>Drop a player (optional)</div>
             <div style={{ maxHeight: 240, overflowY: "auto", marginBottom: 20 }}>
               {roster.map(p => (
                 <div key={p.name} onClick={() => setDropTarget(dropTarget?.name === p.name ? null : p)} className="search-result"
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 6, cursor: "pointer", marginBottom: 4, background: dropTarget?.name === p.name ? "#1a2f4a" : "transparent", border: `1px solid ${dropTarget?.name === p.name ? "#4f6ef7" : "transparent"}`, transition: "all 0.15s" }}>
-                  <div style={{ background: "#141928", border: "1px solid #1e2845", borderRadius: 3, padding: "2px 7px", fontSize: 10, color: "#4f6ef7", minWidth: 28, textAlign: "center" }}>{p.pos}</div>
-                  <div style={{ flex: 1, fontSize: 12, color: "#e2e8f0" }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: "#fbbf24" }}>{p.proj ?? "—"} pts</div>
-                  {dropTarget?.name === p.name && <div style={{ fontSize: 10, color: "#ef4444" }}>DROP</div>}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 6, cursor: "pointer", marginBottom: 4, background: dropTarget?.name === p.name ? "#1a3a28" : "transparent", border: `1px solid ${dropTarget?.name === p.name ? C.accent : "transparent"}`, transition: "all 0.15s" }}>
+                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 3, padding: "2px 7px", fontSize: 11, color: C.accent, minWidth: 28, textAlign: "center" }}>{p.pos}</div>
+                  <div style={{ flex: 1, fontSize: 13, color: C.t2 }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: C.amber }}>{p.proj ?? "—"} pts</div>
+                  {dropTarget?.name === p.name && <div style={{ fontSize: 11, color: C.red, fontWeight: 600 }}>Drop</div>}
                 </div>
               ))}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setAddingPlayer(null); setDropTarget(null); }} style={{ flex: 1, background: "transparent", border: "1px solid #1e2845", color: "#94a3b8", padding: "10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}>CANCEL</button>
-              <button onClick={confirmAdd} style={{ flex: 2, background: "#4f6ef7", border: "none", color: "#fff", padding: "10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700 }}>
-                {dropTarget ? `ADD & DROP ${dropTarget.name.split(" ")[1] || dropTarget.name}` : "ADD TO ROSTER"}
+              <button onClick={() => { setAddingPlayer(null); setDropTarget(null); }} style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, color: C.t2, padding: "10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>Cancel</button>
+              <button onClick={confirmAdd} style={{ flex: 2, background: C.accent, border: "none", color: "#fff", padding: "10px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700 }}>
+                {dropTarget ? `Add & Drop ${dropTarget.name.split(" ")[1] || dropTarget.name}` : "Add to Roster"}
               </button>
             </div>
           </div>
@@ -477,17 +502,17 @@ export default function App() {
       )}
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e2845", padding: isMobile ? "10px 14px" : "14px 24px", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, background: "#0a0b13", flexShrink: 0 }}>
-        <button onClick={() => setStarted(false)} title="Back to home" style={{ background: "transparent", border: "1px solid #1e2845", borderRadius: 4, color: "#64748b", cursor: "pointer", fontSize: 11, padding: "4px 8px", fontFamily: "inherit", letterSpacing: 1, flexShrink: 0 }}>← HOME</button>
-        <BoltIcon size={isMobile ? 18 : 22} color="#4f6ef7" />
+      <div style={{ borderBottom: `1px solid ${C.border}`, padding: isMobile ? "10px 14px" : "14px 24px", display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, background: C.bg, flexShrink: 0 }}>
+        <button onClick={() => setStarted(false)} title="Back to home" style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.t3, cursor: "pointer", fontSize: 11, padding: "8px 14px", fontFamily: "inherit", letterSpacing: 1, flexShrink: 0, minHeight: 36 }}>← Home</button>
+        <BoltIcon size={isMobile ? 18 : 22} color={C.accent} />
         {!isMobile && <div>
-          <div className="heading" style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: "#4f6ef7" }}>BLITZ</div>
-          <div className="heading" style={{ fontSize: 10, color: "#475569", letterSpacing: 2 }}>FANTASY FOOTBALL ASSISSTANT</div>
+          <div className="blitz-font" style={{ fontSize: 14, fontWeight: 700, letterSpacing: 3, color: C.accent }}>BLITZ</div>
+          <div style={{ fontSize: 11, color: C.t3, letterSpacing: 2 }}>FANTASY FOOTBALL ASSISTANT</div>
         </div>}
-        {isMobile && <div className="heading" style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: "#4f6ef7" }}>BLITZ</div>}
+        {isMobile && <div className="blitz-font" style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: C.accent }}>BLITZ</div>}
         <div style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 4 : 8 }}>
           {["roster", "waiver", "lineup", "chat"].map(t => (
-            <button key={t} onClick={() => { setTab(t); setShowDetail(false); }} className="heading" style={{ background: tab === t ? "#4f6ef7" : "transparent", border: `1px solid ${tab === t ? "#4f6ef7" : "#1e2845"}`, color: tab === t ? "#fff" : "#64748b", padding: isMobile ? "6px 10px" : "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: isMobile ? 10 : 11, letterSpacing: 1, textTransform: "uppercase" }}>
+            <button key={t} onClick={() => { setTab(t); setShowDetail(false); }} className="blitz-font" style={{ background: tab === t ? C.accent : "transparent", border: `1px solid ${tab === t ? C.accent : C.border}`, color: tab === t ? "#fff" : C.t3, padding: isMobile ? "6px 10px" : "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: isMobile ? 10 : 11, letterSpacing: 1, textTransform: "uppercase", transition: "all 0.15s" }}>
               {t}
             </button>
           ))}
@@ -497,26 +522,27 @@ export default function App() {
       {/* ── ROSTER TAB ── */}
       {tab === "roster" && (
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", height: "calc(100dvh - 57px)", overflow: "hidden" }}>
-          <div style={{ borderRight: "1px solid #1e2845", overflowY: "auto", background: "#0a0b13", display: isMobile && showDetail ? "none" : "block" }}>
-            <div style={{ padding: "12px 16px", fontSize: 10, letterSpacing: 2, color: "#475569", borderBottom: "1px solid #1e2845", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="heading">ROSTER — {roster.length} PLAYERS</span>
-              <button onClick={() => setTab("waiver")} style={{ background: "#4f6ef7", border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "inherit", letterSpacing: 1 }}>+ ADD</button>
+          <div style={{ borderRight: `1px solid ${C.border}`, overflowY: "auto", background: C.surface, display: isMobile && showDetail ? "none" : "block" }}>
+            <div style={{ padding: "12px 16px", fontSize: 11, letterSpacing: 2, color: C.t3, borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", textTransform: "uppercase" }}>
+              <span>Roster — {roster.length} Players</span>
+              <button onClick={() => setTab("waiver")} style={{ background: C.accent, border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", letterSpacing: 1 }}>+ Add</button>
             </div>
             {roster.map(p => (
               <div key={p.name} onClick={() => { setSelected(p); if (isMobile) setShowDetail(true); }} className="player-row"
-                style={{ padding: "14px 16px", borderBottom: "1px solid #141928", cursor: "pointer", background: selected.name === p.name ? "#141928" : "transparent", transition: "background 0.15s", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ background: "#141928", border: "1px solid #1e2845", borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 700, color: "#4f6ef7", minWidth: 32, textAlign: "center" }}>{p.pos}</div>
+                style={{ padding: "14px 16px", borderBottom: `1px solid ${C.surface}`, cursor: "pointer", background: selected.name === p.name ? C.raised : "transparent", transition: "background 0.15s", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 4, padding: "3px 8px", fontSize: 11, fontWeight: 700, color: C.accent, minWidth: 32, textAlign: "center" }}>{p.pos}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: selected.name === p.name ? "#e2e8f0" : "#94a3b8" }}>{p.name}</div>
-                  <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
-                    Proj: <span style={{ color: "#fbbf24" }}>{p.proj ?? "..."}</span>
-                    <span style={{ color: p.trend >= 0 ? "#34c97a" : "#ef4444", marginLeft: 8 }}>{p.trend >= 0 ? "+" : ""}{p.trend}</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: selected.name === p.name ? C.t1 : C.t2 }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>
+                    Proj: <span style={{ color: C.amber }}>{p.proj ?? "..."}</span>
+                    <span style={{ color: p.trend >= 0 ? C.green : C.red, marginLeft: 8 }}>{p.trend >= 0 ? "+" : ""}{p.trend}</span>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: injuryColor(p.injury) }} className={p.injury && p.injury !== "Healthy" && p.injury !== "—" ? "pulse" : ""} />
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: injuryColor(p.injury), flexShrink: 0 }} className={p.injury && p.injury !== "Healthy" && p.injury !== "—" ? "pulse" : ""} />
+                  <span style={{ fontSize: 11, color: newsColors[p.news || "hold"], fontWeight: 600 }}>{newsLabels[p.news || "hold"]}</span>
                   <button onClick={e => { e.stopPropagation(); setDropConfirm(p); }}
-                    style={{ background: "transparent", border: "1px solid #1e2845", color: "#475569", padding: "2px 7px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "inherit", letterSpacing: 1 }}>DROP</button>
+                    style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.t3, padding: "6px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", minHeight: isMobile ? 44 : 30 }}>Drop</button>
                 </div>
               </div>
             ))}
@@ -526,24 +552,27 @@ export default function App() {
           <div style={{ padding: isMobile ? 16 : 28, overflowY: "auto", display: isMobile && !showDetail ? "none" : "block" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 36 }}>
               <div style={{ flex: 1 }}>
-                {isMobile && <button onClick={() => setShowDetail(false)} style={{ background: "transparent", border: "none", color: "#4f6ef7", fontSize: 11, fontFamily: "inherit", cursor: "pointer", letterSpacing: 1, marginBottom: 12, padding: 0 }}>← BACK TO ROSTER</button>}
-                <div className="heading" style={{ fontSize: isMobile ? 20 : 26, fontWeight: 700, color: "#f1f5f9", letterSpacing: -1 }}>{selected.name}</div>
+                {isMobile && <button onClick={() => setShowDetail(false)} style={{ background: "transparent", border: "none", color: C.accent, fontSize: 12, fontFamily: "inherit", cursor: "pointer", letterSpacing: 1, marginBottom: 12, padding: "8px 0", minHeight: 44, display: "block" }}>← Back to Roster</button>}
+                <div className="blitz-font" style={{ fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.t1, letterSpacing: -1 }}>{selected.name}</div>
                 <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-                  <span style={{ background: "#141928", border: "1px solid #1e2845", color: "#4f6ef7", padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.pos}</span>
+                  <span style={{ background: C.raised, border: `1px solid ${C.border}`, color: C.accent, padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{selected.pos}</span>
                   {selected.injury && selected.injury !== "—" && (
-                    <span style={{ background: "#141928", border: `1px solid ${injuryColor(selected.injury)}`, color: injuryColor(selected.injury), padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{selected.injury}</span>
+                    <span style={{ background: C.raised, border: `1px solid ${injuryColor(selected.injury)}`, color: injuryColor(selected.injury), padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{selected.injury}</span>
                   )}
-                  <span style={{ background: "#141928", border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 11 }}>{newsLabels[selected.news || "hold"]}</span>
+                  <span style={{ background: C.raised, border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{newsLabels[selected.news || "hold"]}</span>
                 </div>
                 {selected.signalReason && (
-                  <div style={{ fontSize: 10, color: "#475569", marginTop: 6, fontStyle: "italic" }}>{selected.signalReason}</div>
+                  <div style={{ fontSize: 13, color: C.t2, marginTop: 6, lineHeight: 1.5 }}>{selected.signalReason}</div>
                 )}
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div className="heading" style={{ fontSize: isMobile ? 32 : 42, fontWeight: 700, color: "#4f6ef7", letterSpacing: -2 }}>{selected.proj ?? "—"}</div>
-                <div className="heading" style={{ fontSize: 10, fontWeight: 400, color: "#475569", letterSpacing: 1 }}>PROJECTED PTS</div>
+                {selected.proj != null
+                  ? <div className="blitz-font" style={{ fontSize: isMobile ? 32 : 42, fontWeight: 700, color: C.accent, letterSpacing: -2 }}>{selected.proj}</div>
+                  : <div style={{ height: isMobile ? 38 : 50, width: 80, background: C.raised, borderRadius: 6, animation: "pulse 1.5s infinite", marginLeft: "auto" }} />
+                }
+                <div style={{ fontSize: 11, color: C.t3, letterSpacing: 1, textTransform: "uppercase" }}>Projected pts</div>
                 {selected.proj && (
-                  <div style={{ fontSize: 12, color: selected.trend >= 0 ? "#34c97a" : "#ef4444", marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: selected.trend >= 0 ? C.green : C.red, marginTop: 4 }}>
                     {selected.trend >= 0 ? "▲" : "▼"} {Math.abs(selected.trend)} vs season avg
                   </div>
                 )}
@@ -552,55 +581,58 @@ export default function App() {
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 20 : 32 }}>
               {[
-                { label: "BASED ON", value: selected.sampleWeeks || "Loading...", color: "#94a3b8" },
-                { label: "CONFIDENCE", value: selected.confidence || "—", color: selected.confidenceColor || "#94a3b8" },
-                { label: "FLOOR", value: selected.floor != null ? selected.floor : "—", color: "#94a3b8" },
-                { label: "CEILING", value: selected.ceiling != null ? selected.ceiling : "—", color: "#94a3b8" },
+                { label: "Based on",   value: selected.sampleWeeks,                              color: C.t2 },
+                { label: "Confidence", value: selected.confidence,                               color: selected.confidenceColor || C.t2 },
+                { label: "Floor",      value: selected.floor != null ? selected.floor : null,    color: C.t2 },
+                { label: "Ceiling",    value: selected.ceiling != null ? selected.ceiling : null, color: C.t2 },
               ].map(stat => (
-                <div key={stat.label} style={{ background: "#111422", border: "1px solid #1e2845", borderRadius: 8, padding: "11px 14px" }}>
-                  <div className="heading" style={{ fontSize: 9, fontWeight: 400, letterSpacing: 2, color: "#475569", marginBottom: 6 }}>{stat.label}</div>
-                  <div className="heading" style={{ fontSize: 22, fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                <div key={stat.label} style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, padding: "11px 14px" }}>
+                  <div style={{ fontSize: 11, color: C.t3, letterSpacing: 1, marginBottom: 6, textTransform: "uppercase" }}>{stat.label}</div>
+                  {stat.value != null
+                    ? <div className="blitz-font" style={{ fontSize: 22, fontWeight: 700, color: stat.color }}>{stat.value}</div>
+                    : <div style={{ height: 28, width: "60%", background: C.border, borderRadius: 4, animation: "pulse 1.5s infinite" }} />
+                  }
                 </div>
               ))}
             </div>
 
             {(selected.factors || []).length > 0 && (
-              <div style={{ background: "#111422", border: "1px solid #1e2845", borderRadius: 8, padding: "20px 20px 14px", marginBottom: 12 }}>
-                <div className="heading" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: "#475569", marginBottom: 18 }}>PROJECTION FACTORS</div>
+              <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, padding: "20px 20px 14px", marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 18, textTransform: "uppercase" }}>Projection Factors</div>
                 {(selected.factors || []).map(s => {
                   const maxImpact = Math.max(...(selected.factors || []).map(f => Math.abs(f.impact)), 1);
                   return (
                     <div key={s.factor} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, color: "#94a3b8", width: isMobile ? 120 : 180, flexShrink: 0 }}>{s.factor}</div>
-                      <div style={{ flex: 1, height: 6, background: "#1e2845", borderRadius: 3, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${Math.abs(s.impact) / maxImpact * 100}%`, background: s.impact >= 0 ? "#34c97a" : "#ef4444", borderRadius: 3 }} />
+                      <div style={{ fontSize: 12, color: C.t2, width: isMobile ? 120 : 180, flexShrink: 0 }}>{s.factor}</div>
+                      <div style={{ flex: 1, height: 6, background: C.border, borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.abs(s.impact) / maxImpact * 100}%`, background: s.impact >= 0 ? C.green : C.red, borderRadius: 3 }} />
                       </div>
-                      <div style={{ fontSize: 11, color: s.impact >= 0 ? "#34c97a" : "#ef4444", width: 44, textAlign: "right" }}>{s.impact >= 0 ? "+" : ""}{s.impact}</div>
+                      <div style={{ fontSize: 12, color: s.impact >= 0 ? C.green : C.red, width: 44, textAlign: "right" }}>{s.impact >= 0 ? "+" : ""}{s.impact}</div>
                     </div>
                   );
                 })}
               </div>
             )}
 
-            <div style={{ background: "#111422", border: "1px solid #1e2845", borderRadius: 8, padding: "20px 20px 28px" }}>
-              <div className="heading" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: "#475569", marginBottom: 20 }}>RECENT NEWS & SIGNALS</div>
-              {newsLoading && <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>Loading news...</div>}
+            <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, padding: "20px 20px 28px" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Recent News & Signals</div>
+              {newsLoading && <div style={{ fontSize: 12, color: C.t3, letterSpacing: 1 }}>Loading news...</div>}
               {!newsLoading && playerNews.length === 0 && (
-                <div style={{ fontSize: 11, color: "#475569" }}>No recent news found for {selected.name}.</div>
+                <div style={{ fontSize: 12, color: C.t3 }}>No recent news found for {selected.name}.</div>
               )}
               {!newsLoading && playerNews.map((n, i) => {
                 const timeAgo = n.publishedAt ? new Date(n.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
                 return (
                   <div key={i} style={{ borderLeft: `2px solid ${newsColors[n.signal]}`, paddingLeft: 14, marginBottom: 14 }}>
                     <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: "#4f6ef7", fontWeight: 600 }}>{n.source}</span>
-                      <span style={{ fontSize: 10, color: "#475569" }}>{timeAgo}</span>
-                      <span style={{ fontSize: 10, color: newsColors[n.signal], marginLeft: "auto" }}>{newsLabels[n.signal]}</span>
+                      <span style={{ fontSize: 11, color: C.accent, fontWeight: 600 }}>{n.source}</span>
+                      <span style={{ fontSize: 11, color: C.t3 }}>{timeAgo}</span>
+                      <span style={{ fontSize: 11, color: newsColors[n.signal], marginLeft: "auto" }}>{newsLabels[n.signal]}</span>
                     </div>
                     <a href={n.url} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 13, fontWeight: 400, color: "#94a3b8", lineHeight: 1.5, textDecoration: "none", display: "block" }}
-                      onMouseOver={e => e.currentTarget.style.color = "#e2e8f0"}
-                      onMouseOut={e => e.currentTarget.style.color = "#94a3b8"}>
+                      style={{ fontSize: 13, color: C.t2, lineHeight: 1.5, textDecoration: "none", display: "block" }}
+                      onMouseOver={e => e.currentTarget.style.color = C.t1}
+                      onMouseOut={e => e.currentTarget.style.color = C.t2}>
                       {n.title}
                     </a>
                   </div>
@@ -614,36 +646,36 @@ export default function App() {
       {/* ── WAIVER WIRE TAB ── */}
       {tab === "waiver" && (
         <div style={{ padding: isMobile ? 14 : 28, maxWidth: 800, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
-          <div className="heading" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: "#475569", marginBottom: 20 }}>WAIVER WIRE — SEARCH & ADD PLAYERS</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Waiver Wire — Search & Add Players</div>
           <div style={{ position: "relative", marginBottom: 24 }}>
-            <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", lineHeight: 0 }}><SearchIcon size={16} color="#475569" /></div>
+            <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", lineHeight: 0 }}><SearchIcon size={16} color={C.t3} /></div>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search for any NFL player (e.g. Jaylen Waddle, Davante Adams...)"
-              style={{ width: "100%", background: "#111422", border: "1px solid #1e2845", borderRadius: 8, padding: "14px 16px 14px 46px", color: "#e2e8f0", fontSize: 13, fontFamily: "inherit" }}
+              style={{ width: "100%", background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px 14px 46px", color: C.t1, fontSize: 13, fontFamily: "inherit" }}
               autoFocus />
-            {searching && <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#4f6ef7", letterSpacing: 1 }}>SEARCHING...</div>}
+            {searching && <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.accent, letterSpacing: 1 }}>Searching...</div>}
           </div>
           {searchResults.length > 0 && (
             <div className="slide-in">
-              <div style={{ fontSize: 10, letterSpacing: 2, color: "#475569", marginBottom: 12 }}>{searchResults.length} PLAYERS FOUND</div>
+              <div style={{ fontSize: 11, letterSpacing: 1, color: C.t3, marginBottom: 12 }}>{searchResults.length} players found</div>
               <div style={{ display: "grid", gap: 8 }}>
                 {searchResults.map((p, i) => (
                   <div key={i} className="search-result"
-                    style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: "#111422", border: "1px solid #1e2845", borderRadius: 8, transition: "background 0.15s" }}>
-                    <div style={{ background: "#141928", border: "1px solid #1e2845", borderRadius: 4, padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#4f6ef7", minWidth: 36, textAlign: "center" }}>{p.position}</div>
+                    style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, transition: "background 0.15s" }}>
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 10px", fontSize: 11, fontWeight: 700, color: C.accent, minWidth: 36, textAlign: "center" }}>{p.position}</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{p.player}</div>
-                      <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.t1 }}>{p.player}</div>
+                      <div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>
                         {p.team} · Floor: {p.floor} · Ceiling: {p.ceiling} · {p.games_sampled} games
                       </div>
                     </div>
                     <div style={{ textAlign: "right", marginRight: isMobile ? 0 : 16 }}>
-                      <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: "#fbbf24" }}>{p.projected_points}</div>
-                      <div style={{ fontSize: 9, color: "#475569", letterSpacing: 1 }}>PROJ PTS</div>
+                      <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.amber }}>{p.projected_points}</div>
+                      <div style={{ fontSize: 11, color: C.t3, letterSpacing: 1 }}>proj pts</div>
                     </div>
                     <button onClick={() => handleAddPlayer(p)}
-                      style={{ background: "#4f6ef7", border: "none", color: "#fff", padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 700, letterSpacing: 1, whiteSpace: "nowrap" }}>
-                      + ADD
+                      style={{ background: C.accent, border: "none", color: "#fff", padding: isMobile ? "8px 12px" : "8px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, letterSpacing: 1, whiteSpace: "nowrap" }}>
+                      + Add
                     </button>
                   </div>
                 ))}
@@ -651,13 +683,13 @@ export default function App() {
             </div>
           )}
           {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
-            <div style={{ textAlign: "center", padding: 40, color: "#475569", fontSize: 12 }}>No players found for "{searchQuery}".</div>
+            <div style={{ textAlign: "center", padding: 40, color: C.t3, fontSize: 13 }}>No players found for "{searchQuery}".</div>
           )}
           {!searchQuery && (
             <div style={{ textAlign: "center", padding: 60 }}>
-              <div style={{ marginBottom: 12 }}><BoltIcon size={32} color="#4f6ef7" /></div>
-              <div style={{ fontSize: 12, color: "#475569" }}>Type a name to search</div>
-              <div style={{ fontSize: 10, color: "#2d4a6a", marginTop: 8 }}>2022–2025 NFL data</div>
+              <div style={{ marginBottom: 12 }}><BoltIcon size={32} color={C.accent} /></div>
+              <div style={{ fontSize: 13, color: C.t3 }}>Type a name to search</div>
+              <div style={{ fontSize: 11, color: C.t3, opacity: 0.5, marginTop: 8 }}>2022–2025 NFL data</div>
             </div>
           )}
         </div>
@@ -666,22 +698,22 @@ export default function App() {
       {/* ── LINEUP TAB ── */}
       {tab === "lineup" && (
         <div style={{ padding: isMobile ? 14 : 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
-          <div className="heading" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: "#475569", marginBottom: 24 }}>OPTIMAL LINEUP — HALF PPR</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 24, textTransform: "uppercase" }}>Optimal Lineup — Half PPR</div>
           {roster.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, color: "#475569" }}>Add players to your roster to see lineup suggestions.</div>
+            <div style={{ textAlign: "center", padding: 60, color: C.t3 }}>Add players to your roster to see lineup suggestions.</div>
           ) : (
             <>
               {roster.map((p, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", background: "#111422", border: "1px solid #1e2845", borderRadius: 6, marginBottom: 8 }}>
-                  <div style={{ width: 44, fontSize: 10, color: "#475569", letterSpacing: 1 }}>{p.pos}</div>
-                  <div style={{ flex: 1, fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#4f6ef7" }}>{p.proj ?? "—"}</div>
-                  <div style={{ fontSize: 14, color: p.trend >= 0 ? "#34c97a" : "#ef4444" }}>{p.trend >= 0 ? "↑" : "↓"}</div>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", background: C.raised, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ width: 44, fontSize: 11, color: C.t3, letterSpacing: 1 }}>{p.pos}</div>
+                  <div style={{ flex: 1, fontSize: 13, color: C.t1, fontWeight: 500 }}>{p.name}</div>
+                  <div className="blitz-font" style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{p.proj ?? "—"}</div>
+                  <div style={{ fontSize: 14, color: p.trend >= 0 ? C.green : C.red }}>{p.trend >= 0 ? "↑" : "↓"}</div>
                 </div>
               ))}
-              <div style={{ marginTop: 16, padding: "16px 20px", background: "#141928", border: "1px solid #4f6ef7", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#64748b", letterSpacing: 1 }}>TOTAL PROJECTED</span>
-                <span style={{ fontSize: 28, fontWeight: 700, color: "#4f6ef7" }}>
+              <div style={{ marginTop: 16, padding: "16px 20px", background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: C.t3, letterSpacing: 1, textTransform: "uppercase" }}>Total Projected</span>
+                <span className="blitz-font" style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>
                   {roster.reduce((sum, p) => sum + (p.proj ?? 0), 0).toFixed(1)} pts
                 </span>
               </div>
@@ -696,24 +728,45 @@ export default function App() {
           <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
             {messages.map((m, i) => (
               <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: isMobile ? "88%" : "72%", background: m.role === "user" ? "#4f6ef7" : "#111422", border: `1px solid ${m.role === "user" ? "#4f6ef7" : "#1e2845"}`, borderRadius: m.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "12px 16px", fontSize: 13, fontWeight: 400, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "#cbd5e1" }}>
-                  {m.role === "ai" && <div className="heading" style={{ fontSize: 9, color: "#4f6ef7", letterSpacing: 2, marginBottom: 6 }}>BLITZ</div>}
-                  {m.role === "ai" ? <SimpleMarkdown text={m.text} /> : m.text}
+                <div style={{ maxWidth: isMobile ? "88%" : "72%", background: m.role === "user" ? C.accent : C.raised, border: `1px solid ${m.role === "user" ? C.accent : C.border}`, borderRadius: m.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px", padding: "12px 16px", fontSize: 14, lineHeight: 1.6, color: m.role === "user" ? "#fff" : C.t2 }}>
+                  {m.role === "ai" && <div className="blitz-font" style={{ fontSize: 11, color: C.accent, letterSpacing: 2, marginBottom: 6 }}>BLITZ</div>}
+                  {m.role === "ai"
+                    ? (i === streamingIdx ? <TypewriterMessage text={m.text} /> : <SimpleMarkdown text={m.text} />)
+                    : m.text}
                 </div>
               </div>
             ))}
-            {loading && (
-              <div style={{ display: "flex", gap: 4, padding: 16 }}>
-                {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#4f6ef7", animation: `pulse 1s ${i * 0.2}s infinite` }} />)}
+            {messages.length === 1 && !loading && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 4 }}>
+                {[
+                  "Who should I start this week?",
+                  "Analyze a trade for me",
+                  "Who should I pick up on waivers?",
+                  "What's my team's projected score?",
+                ].map(chip => (
+                  <button key={chip} onClick={() => { setChatInput(chip); }}
+                    className="chat-chip"
+                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 20, padding: "7px 14px", color: C.t3, fontSize: 13, fontFamily: "inherit", cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" }}>
+                    {chip}
+                  </button>
+                ))}
               </div>
             )}
+            {loading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px" }}>
+                <BoltIcon size={14} color={C.accent} />
+                <span style={{ fontSize: 11, color: C.accent, letterSpacing: 2 }} className="pulse">BLITZ IS THINKING...</span>
+              </div>
+            )}
+            <div ref={chatBottomRef} />
           </div>
-          <div style={{ borderTop: "1px solid #1e2845", padding: isMobile ? "10px 12px" : 16, display: "flex", gap: 10, background: "#0a0b13" }}>
-            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()}
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: isMobile ? "10px 12px" : 16, display: "flex", gap: 10, background: C.bg }}>
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !loading && sendMessage()}
               placeholder="Ask about a player, trade, or lineup..."
-              style={{ flex: 1, background: "#111422", border: "1px solid #1e2845", borderRadius: 6, padding: "10px 14px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit" }} />
+              disabled={loading}
+              style={{ flex: 1, background: C.raised, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 14px", color: C.t1, fontSize: 13, fontFamily: "inherit", opacity: loading ? 0.6 : 1 }} />
             <button onClick={sendMessage} disabled={loading}
-              style={{ background: "#4f6ef7", border: "none", borderRadius: 6, padding: "10px 20px", color: "#fff", fontSize: 11, fontFamily: "inherit", letterSpacing: 1, cursor: "pointer", fontWeight: 600 }}>SEND</button>
+              style={{ background: C.accent, border: "none", borderRadius: 6, padding: "10px 20px", color: "#fff", fontSize: 12, fontFamily: "inherit", letterSpacing: 1, cursor: loading ? "not-allowed" : "pointer", fontWeight: 600, opacity: loading ? 0.5 : 1, transition: "opacity 0.2s" }}>Send</button>
           </div>
         </div>
       )}

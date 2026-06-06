@@ -179,9 +179,7 @@ async def health():
     return {"status": "ok"}
 
 
-# Also keep routes without /api prefix for local dev (port 8000)
 app.include_router(api_router)
-app.include_router(APIRouter(routes=api_router.routes))  # mounts at root too
 
 
 # ── Serve React frontend (must be LAST) ─────────────────────────────────────
