@@ -3,8 +3,10 @@ backend/__pycache__/
 backend/**/__pycache__/
 *.pyc
 backend/ml/model.pkl
+backend/data/kicker_cache.pkl
 frontend/node_modules/
 frontend/screenshot.mjs
+frontend/shot.mjs
 backend/.env
 .claude/
 CLAUDE.md

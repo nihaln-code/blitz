@@ -112,12 +112,12 @@ function SearchIcon({ size = 20, color = "currentColor" }) {
 
 function WelcomePage({ onStart }) {
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", color: C.t1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 24px", overflow: "hidden", position: "relative" }}>
+    <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", color: C.t1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 24px", overflow: "hidden", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-        .blitz-font { font-family: 'Space Grotesk', sans-serif; }
+        .blitz-font { font-family: 'Barlow Condensed', sans-serif; }
         .welcome-btn:hover { background: #059669 !important; transform: translateY(-1px); }
         .welcome-btn:active { transform: translateY(1px); }
       `}</style>
@@ -137,7 +137,7 @@ function WelcomePage({ onStart }) {
         {[
           { title: "Projections",     desc: "See the exact reasoning behind each number.",                                                                     accent: C.accent, delay: "0.18s" },
           { title: "Floor & Ceiling", desc: "10th and 90th percentile outcomes so you know the realistic range, not just the average.",                        accent: C.green,  delay: "0.26s" },
-          { title: "Waiver Wire",     desc: "Search any player and get their projection, floor and ceiling.",                                                  accent: C.accent, delay: "0.34s" },
+          { title: "Players",         desc: "Search any player and get their projection, floor and ceiling.",                                                  accent: C.accent, delay: "0.34s" },
           { title: "AI Co-Manager",   desc: "Ask about a trade or lineup decision. It uses your actual roster and real projections to answer.",                 accent: C.green,  delay: "0.42s" },
         ].map((f, i) => (
           <div key={f.title} style={{
@@ -183,7 +183,6 @@ function defaultPlayer(name, pos) {
     pos,
     proj: null,
     trend: 0,
-    injury: "—",
     news: "hold",
   };
 }
@@ -199,22 +198,13 @@ function getNewsSig(articles) {
   return "hold";
 }
 
-function combineSignal(newsSig, trend, injury) {
-  const injured = ["Out", "Ir", "Doubtful"].includes(injury);
-  if (injured) return "sell";
+function combineSignal(newsSig, trend) {
   const trendSig = trend >= 2.5 ? "buy" : trend <= -2.5 ? "sell" : "hold";
   if (newsSig === "sell") return "sell";
   if (newsSig === "buy" && trendSig === "sell") return "hold";
   if (newsSig === "buy" || trendSig === "buy") return "buy";
   if (trendSig === "sell") return "sell";
   return "hold";
-}
-
-function injuryColor(injury) {
-  if (!injury || injury === "—") return C.t3;
-  if (injury === "Healthy") return C.green;
-  if (["Out", "Ir", "Doubtful"].includes(injury)) return C.red;
-  return C.amber;
 }
 
 function DropModal({ player, onConfirm, onCancel }) {
@@ -245,6 +235,8 @@ export default function App() {
 
   const [playerNews, setPlayerNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+
+  const [lineupSettings, setLineupSettings] = useState({ QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 0 });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -298,7 +290,7 @@ export default function App() {
   const _rosterKey = roster.map(p => p.name).join("|");
   useEffect(() => {
     roster.forEach(async (p) => {
-      if (p.proj !== null) return;
+      if (p.proj !== null && p.depthChart !== undefined) return;
       try {
         const res = await fetch(`${API}/player/${encodeURIComponent(p.name)}`);
         const data = await res.json();
@@ -310,9 +302,10 @@ export default function App() {
             confidence: data.confidence,
             confidenceColor: data.confidence_color ?? C.green,
             factors: data.factors ?? [],
-            injury: data.injury_status ?? "—",
             floor: data.floor ?? null,
             ceiling: data.ceiling ?? null,
+            depthChart: data.depth_chart ?? "",
+            depthOrder: data.depth_order ?? null,
           };
           setRoster(prev => prev.map(r => r.name === p.name ? { ...r, ...update } : r));
           setSelected(prev => prev.name === p.name ? { ...prev, ...update } : prev);
@@ -336,12 +329,12 @@ export default function App() {
         setNewsLoading(false);
         setRoster(prev => prev.map(r => {
           if (r.name !== selected.name) return r;
-          const news = aiSignal ?? combineSignal(getNewsSig(articles), r.trend ?? 0, r.injury ?? "—");
+          const news = aiSignal ?? combineSignal(getNewsSig(articles), r.trend ?? 0);
           return { ...r, news, signalReason: aiReason };
         }));
         setSelected(prev => {
           if (prev.name !== selected.name) return prev;
-          const news = aiSignal ?? combineSignal(getNewsSig(articles), prev.trend ?? 0, prev.injury ?? "—");
+          const news = aiSignal ?? combineSignal(getNewsSig(articles), prev.trend ?? 0);
           return { ...prev, news, signalReason: aiReason };
         });
       })
@@ -376,8 +369,9 @@ export default function App() {
       confidence: addingPlayer.confidence ?? null,
       confidenceColor: addingPlayer.confidence_color ?? C.green,
       factors: addingPlayer.factors ?? [],
-      injury: addingPlayer.injury_status ?? "—",
       sampleWeeks: addingPlayer.sample_weeks ?? null,
+      depthChart: addingPlayer.depth_chart ?? "",
+      depthOrder: addingPlayer.depth_order ?? null,
     };
     if (dropTarget) {
       setRoster(r => r.map(p => p.name === dropTarget.name ? newPlayer : p));
@@ -436,7 +430,7 @@ export default function App() {
   if (!started) return <WelcomePage onStart={() => setStarted(true)} />;
 
   if (!rosterLoaded) return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+    <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: C.bg, height: "100dvh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <style>{`@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }`}</style>
       <BoltIcon size={28} color={C.accent} />
       <div style={{ fontSize: 11, color: C.accent, letterSpacing: 3 }}>LOADING YOUR ROSTER...</div>
@@ -447,16 +441,16 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: C.bg, height: "100vh", width: "100vw", color: C.t1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: C.bg, height: "100vh", width: "100vw", color: C.t1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { width: 100%; height: 100%; overflow: hidden; }
         @media (max-width: 767px) { html, body, #root { height: 100dvh; } }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: ${C.bg}; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
-        .blitz-font { font-family: 'Space Grotesk', sans-serif; }
+        .blitz-font { font-family: 'Barlow Condensed', sans-serif; }
         .pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
         @keyframes slideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
@@ -511,7 +505,7 @@ export default function App() {
         </div>}
         {isMobile && <div className="blitz-font" style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: C.accent }}>BLITZ</div>}
         <div style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 4 : 8 }}>
-          {["roster", "waiver", "lineup", "chat"].map(t => (
+          {["roster", "players", "lineup", "chat"].map(t => (
             <button key={t} onClick={() => { setTab(t); setShowDetail(false); }} className="blitz-font" style={{ background: tab === t ? C.accent : "transparent", border: `1px solid ${tab === t ? C.accent : C.border}`, color: tab === t ? "#fff" : C.t3, padding: isMobile ? "6px 10px" : "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: isMobile ? 10 : 11, letterSpacing: 1, textTransform: "uppercase", transition: "all 0.15s" }}>
               {t}
             </button>
@@ -525,7 +519,7 @@ export default function App() {
           <div style={{ borderRight: `1px solid ${C.border}`, overflowY: "auto", background: C.surface, display: isMobile && showDetail ? "none" : "block" }}>
             <div style={{ padding: "12px 16px", fontSize: 11, letterSpacing: 2, color: C.t3, borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", textTransform: "uppercase" }}>
               <span>Roster — {roster.length} Players</span>
-              <button onClick={() => setTab("waiver")} style={{ background: C.accent, border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", letterSpacing: 1 }}>+ Add</button>
+              <button onClick={() => setTab("players")} style={{ background: C.accent, border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", letterSpacing: 1 }}>+ Add</button>
             </div>
             {roster.map(p => (
               <div key={p.name} onClick={() => { setSelected(p); if (isMobile) setShowDetail(true); }} className="player-row"
@@ -539,7 +533,6 @@ export default function App() {
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: injuryColor(p.injury), flexShrink: 0 }} className={p.injury && p.injury !== "Healthy" && p.injury !== "—" ? "pulse" : ""} />
                   <span style={{ fontSize: 11, color: newsColors[p.news || "hold"], fontWeight: 600 }}>{newsLabels[p.news || "hold"]}</span>
                   <button onClick={e => { e.stopPropagation(); setDropConfirm(p); }}
                     style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.t3, padding: "6px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", minHeight: isMobile ? 44 : 30 }}>Drop</button>
@@ -556,8 +549,8 @@ export default function App() {
                 <div className="blitz-font" style={{ fontSize: isMobile ? 20 : 26, fontWeight: 700, color: C.t1, letterSpacing: -1 }}>{selected.name}</div>
                 <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
                   <span style={{ background: C.raised, border: `1px solid ${C.border}`, color: C.accent, padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{selected.pos}</span>
-                  {selected.injury && selected.injury !== "—" && (
-                    <span style={{ background: C.raised, border: `1px solid ${injuryColor(selected.injury)}`, color: injuryColor(selected.injury), padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{selected.injury}</span>
+                  {selected.depthChart && (
+                    <span style={{ background: C.raised, border: `1px solid ${C.border}`, color: selected.depthOrder === 1 ? C.green : selected.depthOrder === 2 ? C.amber : C.t3, padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{selected.depthChart}</span>
                   )}
                   <span style={{ background: C.raised, border: `1px solid ${newsColors[selected.news || "hold"]}`, color: newsColors[selected.news || "hold"], padding: "3px 10px", borderRadius: 3, fontSize: 12 }}>{newsLabels[selected.news || "hold"]}</span>
                 </div>
@@ -644,9 +637,9 @@ export default function App() {
       )}
 
       {/* ── WAIVER WIRE TAB ── */}
-      {tab === "waiver" && (
+      {tab === "players" && (
         <div style={{ padding: isMobile ? 14 : 28, maxWidth: 800, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Waiver Wire — Search & Add Players</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Players — Search & Add</div>
           <div style={{ position: "relative", marginBottom: 24 }}>
             <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", lineHeight: 0 }}><SearchIcon size={16} color={C.t3} /></div>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -696,31 +689,126 @@ export default function App() {
       )}
 
       {/* ── LINEUP TAB ── */}
-      {tab === "lineup" && (
-        <div style={{ padding: isMobile ? 14 : 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 24, textTransform: "uppercase" }}>Optimal Lineup — Half PPR</div>
-          {roster.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, color: C.t3 }}>Add players to your roster to see lineup suggestions.</div>
-          ) : (
-            <>
-              {roster.map((p, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 20px", background: C.raised, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 8 }}>
-                  <div style={{ width: 44, fontSize: 11, color: C.t3, letterSpacing: 1 }}>{p.pos}</div>
-                  <div style={{ flex: 1, fontSize: 13, color: C.t1, fontWeight: 500 }}>{p.name}</div>
-                  <div className="blitz-font" style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{p.proj ?? "—"}</div>
-                  <div style={{ fontSize: 14, color: p.trend >= 0 ? C.green : C.red }}>{p.trend >= 0 ? "↑" : "↓"}</div>
-                </div>
-              ))}
-              <div style={{ marginTop: 16, padding: "16px 20px", background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: C.t3, letterSpacing: 1, textTransform: "uppercase" }}>Total Projected</span>
-                <span className="blitz-font" style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>
-                  {roster.reduce((sum, p) => sum + (p.proj ?? 0), 0).toFixed(1)} pts
-                </span>
+      {tab === "lineup" && (() => {
+        const SLOT_CONFIG = [
+          { key: "QB",   label: "QB",   min: 1, max: 2 },
+          { key: "RB",   label: "RB",   min: 1, max: 4 },
+          { key: "WR",   label: "WR",   min: 1, max: 5 },
+          { key: "TE",   label: "TE",   min: 0, max: 2 },
+          { key: "FLEX", label: "FLEX", min: 0, max: 3 },
+          { key: "K",    label: "K",    min: 0, max: 1 },
+        ];
+
+        const buildLineup = () => {
+          const byPos = {};
+          roster.forEach(p => {
+            if (!byPos[p.pos]) byPos[p.pos] = [];
+            byPos[p.pos].push(p);
+          });
+          Object.keys(byPos).forEach(pos => byPos[pos].sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0)));
+
+          const starters = [];
+          const used = new Set();
+
+          const fill = (pos, count, slotKey) => {
+            const avail = (byPos[pos] || []).filter(p => !used.has(p.name));
+            for (let i = 0; i < count; i++) {
+              const slot = count === 1 ? slotKey : `${slotKey}${i + 1}`;
+              if (i < avail.length) { starters.push({ player: avail[i], slot }); used.add(avail[i].name); }
+              else starters.push({ player: null, slot });
+            }
+          };
+
+          fill("QB",  lineupSettings.QB,  "QB");
+          fill("RB",  lineupSettings.RB,  "RB");
+          fill("WR",  lineupSettings.WR,  "WR");
+          fill("TE",  lineupSettings.TE,  "TE");
+
+          const flexEligible = roster
+            .filter(p => ["RB","WR","TE"].includes(p.pos) && !used.has(p.name))
+            .sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0));
+          for (let i = 0; i < lineupSettings.FLEX; i++) {
+            const slot = lineupSettings.FLEX === 1 ? "FLEX" : `FLEX${i + 1}`;
+            if (i < flexEligible.length) { starters.push({ player: flexEligible[i], slot }); used.add(flexEligible[i].name); }
+            else starters.push({ player: null, slot });
+          }
+
+          fill("K",   lineupSettings.K,   "K");
+
+          const bench = roster.filter(p => !used.has(p.name));
+          return { starters, bench };
+        };
+
+        const { starters, bench } = buildLineup();
+        const totalProj = starters.reduce((s, { player }) => s + (player?.proj ?? 0), 0);
+
+        return (
+          <div style={{ padding: isMobile ? 14 : 28, maxWidth: 700, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
+            {/* League format settings */}
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 14, textTransform: "uppercase" }}>League Format</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 8 : 12 }}>
+                {SLOT_CONFIG.map(({ key, label, min, max }) => (
+                  <div key={key} style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center" }}>
+                    <div style={{ fontSize: 10, color: C.t3, letterSpacing: 1, textTransform: "uppercase" }}>{label}</div>
+                    <select
+                      value={lineupSettings[key]}
+                      onChange={e => setLineupSettings(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                      style={{ background: C.raised, border: `1px solid ${C.border}`, color: C.t1, padding: "6px 0", borderRadius: 4, fontSize: 14, fontFamily: "inherit", cursor: "pointer", width: 52, textAlign: "center" }}
+                    >
+                      {Array.from({ length: max - min + 1 }, (_, i) => min + i).map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+
+            {roster.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 60, color: C.t3 }}>Add players to your roster to build a lineup.</div>
+            ) : (
+              <>
+                {starters.map(({ player, slot }, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", background: player ? C.raised : C.surface, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 6, opacity: player ? 1 : 0.45 }}>
+                    <div className="blitz-font" style={{ width: 52, fontSize: 11, color: C.accent, letterSpacing: 1 }}>{slot}</div>
+                    {player ? (
+                      <>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: C.t1, fontWeight: 500 }}>{player.name}</div>
+                          <div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>{player.pos}</div>
+                        </div>
+                        <div style={{ fontSize: 12, color: player.trend >= 0 ? C.green : C.red, marginRight: 8 }}>{player.trend >= 0 ? "▲" : "▼"} {Math.abs(player.trend)}</div>
+                        <div className="blitz-font" style={{ fontSize: 20, fontWeight: 700, color: C.accent, minWidth: 36, textAlign: "right" }}>{player.proj ?? "—"}</div>
+                      </>
+                    ) : (
+                      <div style={{ flex: 1, fontSize: 13, color: C.t3 }}>Empty — add a {slot.replace(/\d/g, "").trim()} to your roster</div>
+                    )}
+                  </div>
+                ))}
+
+                <div style={{ margin: "16px 0 28px", padding: "14px 20px", background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: C.t3, letterSpacing: 1, textTransform: "uppercase" }}>Total Projected</span>
+                  <span className="blitz-font" style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>{totalProj.toFixed(1)} pts</span>
+                </div>
+
+                {bench.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 10, textTransform: "uppercase" }}>Bench</div>
+                    {bench.map((p, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 20px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 6 }}>
+                        <div style={{ width: 52, fontSize: 11, color: C.t3, letterSpacing: 1 }}>{p.pos}</div>
+                        <div style={{ flex: 1, fontSize: 13, color: C.t2 }}>{p.name}</div>
+                        <div className="blitz-font" style={{ fontSize: 16, fontWeight: 600, color: C.t3 }}>{p.proj ?? "—"}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── CHAT TAB ── */}
       {tab === "chat" && (

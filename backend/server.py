@@ -97,10 +97,16 @@ async def get_news(request: Request, player_name: str):
     ]
 
     try:
+        # Expand abbreviated names (e.g. "K.Fairbairn" → "Ka'Imi Fairbairn" not available,
+        # so fall back to last name only for better search coverage)
+        search_name = player_name
+        if _re.match(r"^[A-Za-z]\.[A-Za-z]", player_name):
+            search_name = player_name.split(".", 1)[-1].strip()
+
         resp = http_requests.get(
             "https://newsapi.org/v2/everything",
             params={
-                "q": f'"{player_name}" NFL',
+                "q": f'"{search_name}" NFL',
                 "apiKey": settings.newsapi_key,
                 "language": "en",
                 "sortBy": "publishedAt",
@@ -145,11 +151,12 @@ async def get_news(request: Request, player_name: str):
                         f"{stats['usage_season']} season avg "
                         f"({'+' if stats['usage_trend'] >= 0 else ''}{stats['usage_trend']})"
                     )
+                depth_line = f"Depth Chart: {stats['depth_chart']}" if stats.get("depth_chart") else ""
                 prompt = f"""You are a fantasy football analyst. Give a fantasy buy/sell/hold signal for {player_name}.
 
 Position: {stats.get('position','?')} | Team: {stats.get('team','?')}
 ML Projection: {stats.get('projected_points','?')} pts ({'+' if (stats.get('trend') or 0) >= 0 else ''}{stats.get('trend','?')} vs season avg) | Confidence: {stats.get('confidence','?')}
-Injury: {stats.get('injury_status','Healthy')}
+{depth_line}
 {usage_line}
 
 Recent news:
@@ -189,4 +196,7 @@ if os.path.exists(static_dir):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        return FileResponse(f"{static_dir}/index.html")
+        return FileResponse(
+            f"{static_dir}/index.html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )

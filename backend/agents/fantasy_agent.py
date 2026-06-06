@@ -38,13 +38,6 @@ Recent Games:
 {games}
 """
 @tool
-def check_injury_status(player_name: str) -> str:
-    """Check a player's current injury status and practice participation."""
-    from data.stats import get_injury_status
-    status = get_injury_status(player_name)
-    return f"🏥 {player_name} injury status: {status}"
-
-@tool
 def research_player_news(player_name: str) -> str:
     """Research recent news and press conference quotes about a player."""
     import requests
@@ -84,13 +77,11 @@ def analyze_trade(giving_players: str, receiving_players: str) -> str:
         stats = get_player_stats(name)
         if not stats["found"]:
             return f"  {name}: not found", 0.0, "?"
-        inj = stats["injury_status"]
-        inj_note = f" ⚠️ {inj}" if inj not in ("Healthy", "Active", "—", "") else ""
         line = (
             f"  {stats['player']} ({stats['position']}, {stats['team']}) — "
             f"{stats['projected_points']} pts/wk | "
             f"Floor {stats['floor']} / Ceiling {stats['ceiling']} | "
-            f"Confidence: {stats['confidence']}{inj_note}"
+            f"Confidence: {stats['confidence']}"
         )
         return line, stats["projected_points"], stats["position"]
 
@@ -170,7 +161,6 @@ def build_fantasy_agent():
 
     tools = [
         get_player_projection,
-        check_injury_status,
         research_player_news,
         analyze_trade,
         optimize_lineup,
