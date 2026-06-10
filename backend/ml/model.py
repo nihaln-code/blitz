@@ -19,20 +19,22 @@ import shap
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
 
-# Positions we build models for
+# Only skill positions - kickers use a rolling average instead of ML
 POSITIONS = ["QB", "RB", "WR", "TE"]
 
-# Feature names per position
+# These 7 features are used for every position
 BASE_FEATURES = [
-    "roll2_fp",          # 2-week rolling avg fantasy points
-    "roll4_fp",          # 4-week rolling avg fantasy points
-    "roll4_std",         # 4-week std dev (consistency)
-    "roll4_td_rate",     # TDs per game last 4 weeks
-    "opp_fp_allowed",    # opponent avg fp allowed to this position (last 4 wks)
-    "week",              # season week number (schedule difficulty varies)
-    "season_avg_fp",     # full season avg fp (baseline)
+    "roll2_fp",          # avg fantasy points last 2 games (hot/cold streak)
+    "roll4_fp",          # avg fantasy points last 4 games (recent trend)
+    "roll4_std",         # standard deviation over last 4 games (consistency)
+    "roll4_td_rate",     # touchdowns per game last 4 weeks
+    "opp_fp_allowed",    # how many points the opponent typically allows to this position
+    "week",              # week number in the season
+    "season_avg_fp",     # player's full season average (their baseline)
 ]
 
+# Each position gets 3 extra features on top of the 7 base features
+# These capture position-specific volume (workload), which is highly predictive
 POSITION_EXTRA = {
     "QB": ["roll4_attempts", "roll4_pass_yards", "roll4_rush_yards"],
     "RB": ["roll4_carries",  "roll4_rush_yards", "roll4_receptions"],
@@ -42,15 +44,19 @@ POSITION_EXTRA = {
 
 
 def _calc_fp(df: pd.DataFrame) -> pd.Series:
-    """Full PPR fantasy points."""
+    """Full PPR fantasy points. col() safely returns 0 if the column doesn't exist."""
     def col(name):
         return df[name].fillna(0) if name in df.columns else pd.Series(0, index=df.index)
+    # Standard full PPR scoring:
+    # Passing: 0.04/yd (25yd = 1pt), 4pts/TD, -2pts/INT
+    # Rushing/Receiving: 0.1/yd (10yd = 1pt), 6pts/TD
+    # PPR: 1 point per reception
     return (
         col("passing_yards")    * 0.04 +
         col("passing_tds")      * 4    +
         col("rushing_yards")    * 0.1  +
         col("rushing_tds")      * 6    +
-        col("receptions")       * 1.0  +
+        col("receptions")       * 1.0  +   # the "PPR" part
         col("receiving_yards")  * 0.1  +
         col("receiving_tds")    * 6    -
         col("interceptions")    * 2    -
@@ -60,9 +66,9 @@ def _calc_fp(df: pd.DataFrame) -> pd.Series:
 
 def _build_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Given a full dataset, build training rows.
-    For each player-week, compute rolling features from PRIOR weeks only
-    (no data leakage).
+    Converts raw weekly stats into ML training rows.
+    For each player-week, we only use data from PRIOR weeks (no data leakage -
+    you can't know future stats when training on past data).
     """
     df = df.copy().sort_values(["player_display_name", "season", "week"])
     df["fp"] = _calc_fp(df)
@@ -71,7 +77,7 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
 
     for player, pdf in df.groupby("player_display_name"):
         pdf = pdf.sort_values(["season", "week"]).reset_index(drop=True)
-        if len(pdf) < 5:
+        if len(pdf) < 5:   # skip players with too few games - their features would be noisy
             continue
 
         pos = str(pdf["position"].iloc[-1]) if "position" in pdf.columns else "UNK"
@@ -79,14 +85,16 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         for i in range(4, len(pdf)):
-            hist = pdf.iloc[:i]           # everything BEFORE this week
+            hist = pdf.iloc[:i]           # everything BEFORE this week (no leakage)
             curr = pdf.iloc[i]            # the week we're predicting
 
             all_fp = hist["fp"].values
             if len(all_fp) < 2:
                 continue
 
-            # Match the same healthy-game filter used in predict()
+            # Filter out DNP/injury games before computing rolling stats.
+            # A QB scoring 1pt likely didn't play a full game - including those would
+            # artificially drag down his rolling average.
             MIN_HEALTHY_FP = {"QB": 8.0, "RB": 2.0, "WR": 2.0, "TE": 2.0}.get(pos, 2.0)
             healthy = all_fp[all_fp >= MIN_HEALTHY_FP]
             if len(healthy) < 2:
@@ -152,7 +160,7 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
             key = (r["season"], r["week"], r.get("opp_team", ""), r["position"])
             return opp_lookup.get(key, roll4_fp)
 
-        # We need opp_team in result — add it from df
+        # We need opp_team in result, add it from df
         df_opp = df[["player_display_name", "season", "week", "opponent_team"]].copy()
         df_opp.columns = ["player", "season", "week", "opp_team"]
         result = result.merge(df_opp, on=["player", "season", "week"], how="left")
@@ -210,6 +218,8 @@ def train(df: pd.DataFrame) -> dict:
     features_df = _build_features(df)
 
     all_seasons = sorted(features_df["season"].unique())
+    # Train on all seasons except the most recent one; validate on the most recent.
+    # This mimics real-world use: you'd never train and test on the same season.
     val_season  = all_seasons[-1] if len(all_seasons) >= 2 else None
     train_df    = features_df[features_df["season"] != val_season] if val_season else features_df
     val_df      = features_df[features_df["season"] == val_season] if val_season else pd.DataFrame()
@@ -249,14 +259,17 @@ def train(df: pd.DataFrame) -> dict:
             verbosity=0,
         )
 
+        # Main model predicts the expected (mean) outcome
         model = XGBRegressor(**base_params)
         model.fit(X_train, y_train,
                   eval_set=[(X_val, y_val)] if len(X_val) > 0 else None,
                   verbose=False)
 
+        # Floor model: quantile regression targeting the 10th percentile (worst-case)
         floor_model = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.10, **base_params)
         floor_model.fit(X_train, y_train, verbose=False)
 
+        # Ceiling model: quantile regression targeting the 90th percentile (best-case)
         ceiling_model = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.90, **base_params)
         ceiling_model.fit(X_train, y_train, verbose=False)
 
@@ -300,7 +313,7 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
     if position not in models:
         return None
 
-    m     = models[position]["model"]
+    m = models[position]["model"]
     feats = models[position]["features"]
 
     player_df = player_df.copy().sort_values(["season", "week"])
@@ -361,8 +374,10 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
     prediction = max(0.0, round(prediction, 1))
 
     # ── SHAP explanation ────────────────────────────────────────────────────────
+    # SHAP (SHapley Additive exPlanations) breaks down the prediction into
+    # per-feature contributions. e.g. "4-Week Avg added +3.2 pts, Opponent Defense subtracted -1.1 pts"
     explainer  = shap.TreeExplainer(m)
-    shap_vals  = explainer.shap_values(X)[0]
+    shap_vals  = explainer.shap_values(X)[0]   # [0] gets the values for our single prediction row
 
     FACTOR_LABELS = {
         "roll4_fp":       "4-Week Rolling Avg",
@@ -402,7 +417,8 @@ def predict(models: dict, player_df: pd.DataFrame, position: str, opp_defense_av
         floor   = round(max(0.0, prediction - 1.5 * roll4_std), 1)
         ceiling = round(prediction + 1.5 * roll4_std, 1)
 
-    # Confidence from cv
+    # Coefficient of Variation (CV) = std / mean - measures consistency relative to output level.
+    # A player averaging 20pts ± 5pts (cv=0.25) is more reliable than one averaging 8pts ± 5pts (cv=0.625).
     cv = roll4_std / roll4_fp if roll4_fp > 0 else 1.0
     if cv < 0.25:
         confidence, confidence_color = "HIGH",   "#22c55e"

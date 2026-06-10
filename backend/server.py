@@ -15,6 +15,7 @@ from agents.fantasy_agent import build_fantasy_agent, run_agent
 from langchain_core.messages import HumanMessage, AIMessage
 from data.stats import get_player_stats, search_players
 import requests as http_requests
+from loguru import logger
 import os
 
 limiter = Limiter(key_func=get_remote_address)
@@ -179,6 +180,27 @@ Reply with ONLY valid JSON: {{"signal":"buy|hold|sell","reason":"one sentence un
         return {"articles": results, "overall_signal": overall_signal, "signal_reason": signal_reason}
     except Exception:
         return {"articles": [], "overall_signal": "hold", "signal_reason": ""}
+
+
+@api_router.get("/sleeper/league/{league_id}")
+@limiter.limit("10/minute")
+async def sleeper_league(request: Request, league_id: str):
+    """
+    Proxy to the Sleeper API: returns all rosters with player IDs resolved to names.
+    The league_id is the long numeric string from the Sleeper app URL.
+    Returns {"league_name", "season", "teams": [...]} on success,
+    or {"error": "...", "teams": []} if the league ID is invalid or Sleeper is unreachable.
+    """
+    from data.sleeper import get_league_rosters
+    try:
+        return get_league_rosters(league_id)
+    except http_requests.HTTPError as e:
+        # 404 = bad league ID; surface a readable message to the frontend
+        status = e.response.status_code if e.response is not None else "?"
+        return {"error": f"Sleeper returned {status} - check your league ID.", "teams": []}
+    except Exception as e:
+        logger.error(f"Sleeper fetch failed for league {league_id}: {e}")
+        return {"error": str(e), "teams": []}
 
 
 @api_router.get("/health")

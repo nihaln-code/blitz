@@ -1,14 +1,14 @@
 services:
   backend:
-    build: ./backend
+    build: ./backend         # builds using backend/Dockerfile
     ports:
-      - "8000:8000"
+      - "8000:8000"          # localhost:8000 → container:8000
     env_file:
-      - ./backend/.env
+      - ./backend/.env       # injects API keys as environment variables
     volumes:
-      - ./backend/ml:/app/ml
+      - ./backend/ml:/app/ml # mounts the ml/ folder so model.pkl persists between restarts
     dns:
-      - 8.8.8.8
+      - 8.8.8.8              # use Google DNS - avoids Docker's default DNS being unreliable
       - 8.8.4.4
 
   frontend:
@@ -16,21 +16,21 @@ services:
     ports:
       - "5173:5173"
     depends_on:
-      - backend
+      - backend              # ensures backend starts before frontend
     dns:
       - 8.8.8.8
       - 8.8.4.4
 
   nginx:
-    image: nginx:alpine
+    image: nginx:alpine      # lightweight reverse proxy - routes traffic to frontend or backend
     ports:
-      - "80:80"
+      - "80:80"              # public entry point; nginx decides where each request goes
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - frontend
       - backend
-    restart: unless-stopped
+    restart: unless-stopped  # auto-restarts if nginx crashes (not applied to others - they restart intentionally during dev)
     dns:
       - 8.8.8.8
       - 8.8.4.4

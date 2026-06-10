@@ -5,6 +5,9 @@ function getAPI() {
   if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8000/api`;
   }
+  if (window.location.port === "7860") {
+    return `${window.location.protocol}//${window.location.hostname}:7860/api`;
+  }
   if (window.location.hostname.includes("huggingface.co")) {
     return "https://nihalnimmagadda-blitz.hf.space/api";
   }
@@ -20,7 +23,7 @@ const C = {
   hover:   "#1a3028",
   border:  "#1e3028",
   accent:  "#10b981",   // emerald primary
-  green:   "#34c97a",   // buy signal (lighter warm green — distinct from primary)
+  green:   "#34c97a",   // buy signal (lighter warm green - distinct from primary)
   red:     "#ef4444",
   amber:   "#fbbf24",
   t1:      "#f0faf6",   // primary text (subtle green-white)
@@ -164,7 +167,7 @@ function WelcomePage({ onStart }) {
   );
 }
 
-// Minimal seed roster — only name and position, everything else loads from backend
+// Minimal seed roster - only name and position, everything else loads from backend
 const SEED_ROSTER = [
   { name: "Josh Allen",           pos: "QB" },
   { name: "CeeDee Lamb",          pos: "WR" },
@@ -205,6 +208,232 @@ function combineSignal(newsSig, trend) {
   if (newsSig === "buy" || trendSig === "buy") return "buy";
   if (trendSig === "sell") return "sell";
   return "hold";
+}
+
+// Position badge colors - consistent across roster tab and league tab
+const POS_COLORS = {
+  QB: "#10b981",   // emerald (matches accent)
+  RB: "#34c97a",   // warm green
+  WR: "#60a5fa",   // blue
+  TE: "#fbbf24",   // amber
+  K:  "#4e7068",   // dim
+  DEF:"#4e7068",
+};
+
+function LeagueTab({ isMobile, onClaimRoster }) {
+  // Persist the league ID so the user doesn't have to re-enter it on every visit
+  const [inputVal, setInputVal]     = useState(() => localStorage.getItem("sleeperLeagueId") || "");
+  const [leagueData, setLeagueData] = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState(null);
+
+  const fetchLeague = async (id) => {
+    const trimmed = id.trim();
+    if (!trimmed || trimmed.length < 5) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res  = await fetch(`${API}/sleeper/league/${trimmed}`);
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+        setLeagueData(null);
+      } else {
+        setLeagueData(data);
+        localStorage.setItem("sleeperLeagueId", trimmed);
+      }
+    } catch {
+      setError("Could not reach the backend. Is it running?");
+    }
+    setLoading(false);
+  };
+
+  // Auto-load the saved league ID on first render.
+  // setTimeout defers the call so setState isn't invoked synchronously inside the effect.
+  useEffect(() => {
+    const saved = localStorage.getItem("sleeperLeagueId");
+    if (!saved) return;
+    const id = setTimeout(() => fetchLeague(saved), 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  return (
+    <div style={{ padding: isMobile ? 14 : 28, overflowY: "auto", height: "calc(100dvh - 57px)" }}>
+
+      {/* ── League ID input ─────────────────────────────────────────────── */}
+      <div style={{ maxWidth: 600, margin: "0 auto 32px" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 12, textTransform: "uppercase" }}>
+          Sleeper League
+        </div>
+        <div style={{ fontSize: 13, color: C.t2, marginBottom: 6, lineHeight: 1.6 }}>
+          Paste your Sleeper league ID to view all rosters.
+        </div>
+        {/* Tell users exactly where to find their league ID */}
+        <div style={{ fontSize: 12, color: C.t3, marginBottom: 18, lineHeight: 1.6 }}>
+          Find it in your Sleeper app URL:{" "}
+          <span style={{ color: C.accent, fontFamily: "monospace" }}>
+            sleeper.com/leagues/<strong>1234567890123456789</strong>/…
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && fetchLeague(inputVal)}
+            placeholder="e.g. 1048399999814123520"
+            style={{ flex: 1, background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", color: C.t1, fontSize: 13, fontFamily: "inherit" }}
+          />
+          <button
+            onClick={() => fetchLeague(inputVal)}
+            disabled={loading}
+            style={{ background: C.accent, border: "none", color: "#fff", padding: "12px 22px", borderRadius: 8, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700, letterSpacing: 1, opacity: loading ? 0.6 : 1, transition: "opacity 0.2s" }}
+          >
+            {loading ? "Loading…" : "Load"}
+          </button>
+        </div>
+
+        {/* Error banner */}
+        {error && (
+          <div style={{ marginTop: 12, fontSize: 13, color: C.red, padding: "10px 14px", background: "#2a1414", border: `1px solid ${C.red}44`, borderRadius: 6 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Tip: tell users they can paste the league ID into chat for AI analysis */}
+        {leagueData && (
+          <div style={{ marginTop: 16, fontSize: 12, color: C.t3, padding: "10px 14px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, lineHeight: 1.6 }}>
+            <span style={{ color: C.accent, fontWeight: 600 }}>Tip:</span> Paste your league ID into the Chat tab and ask the AI to analyze a trade - it will fetch these rosters automatically.
+          </div>
+        )}
+      </div>
+
+      {/* ── Roster grid ─────────────────────────────────────────────────── */}
+      {leagueData && (
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          {/* League header */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <div className="blitz-font" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: C.t1, letterSpacing: -0.5 }}>
+              {leagueData.league_name}
+            </div>
+            <div style={{ fontSize: 12, color: C.t3 }}>
+              {leagueData.season} · {leagueData.teams.length} teams
+            </div>
+            {/* Refresh button - re-fetches in case rosters changed */}
+            <button
+              onClick={() => fetchLeague(inputVal)}
+              style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${C.border}`, color: C.t3, padding: "5px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit", fontSize: 11, letterSpacing: 1 }}
+            >
+              ↻ Refresh
+            </button>
+          </div>
+
+          {/* Responsive grid: 1 col on mobile, auto-fill ~280px cards on desktop */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+            {leagueData.teams.map(team => (
+              <TeamCard key={team.roster_id} team={team} onClaimRoster={onClaimRoster} />
+            ))}
+          </div>
+
+          {/* Legend explaining the starter dot */}
+          <div style={{ marginTop: 18, fontSize: 11, color: C.t3 }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: C.accent, marginRight: 6, verticalAlign: "middle" }} />
+            Active in Sleeper lineup this week
+          </div>
+        </div>
+      )}
+
+      {/* Empty state - no league loaded yet */}
+      {!leagueData && !loading && !error && (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: C.t3 }}>
+          <BoltIcon size={32} color={C.accent} />
+          <div style={{ fontSize: 13, marginTop: 16, marginBottom: 8 }}>No league loaded</div>
+          <div style={{ fontSize: 11, opacity: 0.6 }}>Enter your Sleeper league ID above to see all rosters</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamCard({ team, onClaimRoster }) {
+  const [claimed, setClaimed] = useState(false);
+
+  // Split players into starters and bench for visual grouping
+  const starters = team.players.filter(p => p.is_starter);
+  const bench    = team.players.filter(p => !p.is_starter);
+
+  const handleClaim = () => {
+    onClaimRoster(team.players);
+    // Brief visual confirmation before the tab switches to roster
+    setClaimed(true);
+  };
+
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${claimed ? C.accent : C.border}`, borderRadius: 10, overflow: "hidden", transition: "border-color 0.2s" }}>
+      {/* Team header - contains name and the Claim button */}
+      <div style={{ padding: "11px 14px", borderBottom: `1px solid ${C.border}`, background: C.raised, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {team.team_name}
+          </div>
+          {/* Show @username only if it differs from the team name */}
+          {team.display_name && team.display_name !== team.team_name && (
+            <div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>@{team.display_name}</div>
+          )}
+        </div>
+        {/* Claim button - copies this roster into the user's active lineup */}
+        <button
+          onClick={handleClaim}
+          style={{ background: claimed ? C.accent : "transparent", border: `1px solid ${claimed ? C.accent : C.border}`, color: claimed ? "#fff" : C.t3, padding: "4px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: claimed ? 700 : 400, letterSpacing: 1, flexShrink: 0, transition: "all 0.2s" }}
+        >
+          {claimed ? "✓ Claimed" : "Use Roster"}
+        </button>
+      </div>
+
+      {/* Starters section */}
+      {starters.length > 0 && (
+        <div style={{ padding: "6px 0" }}>
+          {starters.map((p, i) => (
+            <PlayerRow key={i} player={p} />
+          ))}
+        </div>
+      )}
+
+      {/* Bench section - slightly dimmed to distinguish from starters */}
+      {bench.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, letterSpacing: 1, color: C.t3, padding: "4px 14px 2px", textTransform: "uppercase", borderTop: starters.length > 0 ? `1px solid ${C.border}` : "none", opacity: 0.7 }}>
+            Bench
+          </div>
+          <div style={{ padding: "0 0 6px", opacity: 0.65 }}>
+            {bench.map((p, i) => (
+              <PlayerRow key={i} player={p} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PlayerRow({ player }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px" }}>
+      {/* Position badge */}
+      <div style={{ fontSize: 10, fontWeight: 700, color: POS_COLORS[player.position] || C.t3, minWidth: 28 }}>
+        {player.position}
+      </div>
+      {/* Player name - truncated if too long */}
+      <div style={{ flex: 1, fontSize: 12, color: C.t2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {player.name}
+      </div>
+      {/* NFL team abbreviation */}
+      <div style={{ fontSize: 10, color: C.t3, flexShrink: 0 }}>{player.team}</div>
+      {/* Green dot for active starters */}
+      {player.is_starter && (
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.accent, flexShrink: 0 }} />
+      )}
+    </div>
+  );
 }
 
 function DropModal({ player, onConfirm, onCancel }) {
@@ -312,7 +541,7 @@ export default function App() {
         }
       } catch { /* projection fetch failed silently */ }
     });
-  // _rosterKey is derived from roster names — adding roster directly causes infinite re-renders
+  // _rosterKey is derived from roster names - adding roster directly causes infinite re-renders
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_rosterKey]);
 
@@ -407,7 +636,12 @@ export default function App() {
     setChatInput("");
     setMessages(m => [...m, { role: "user", text: userMsg }]);
     setLoading(true);
-    const fullMsg = `My current roster: ${roster.map(p => `${p.name} (${p.pos}, proj: ${p.proj ?? "loading"}pts)`).join(", ")}\n\nUser question: ${userMsg}`;
+    // Prepend the Sleeper league ID when available so the AI can call get_sleeper_rosters
+    const sleeperLeagueId = localStorage.getItem("sleeperLeagueId");
+    const leagueContext = sleeperLeagueId
+      ? `My Sleeper league ID is ${sleeperLeagueId}. `
+      : "";
+    const fullMsg = `${leagueContext}My current roster: ${roster.map(p => `${p.name} (${p.pos}, proj: ${p.proj ?? "loading"}pts)`).join(", ")}\n\nUser question: ${userMsg}`;
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
@@ -425,6 +659,17 @@ export default function App() {
       setMessages(m => { const next = [...m, { role: "ai", text: "Could not reach backend." }]; setStreamingIdx(next.length - 1); return next; });
     }
     setLoading(false);
+  };
+
+  // Convert a Sleeper team's player list into the app's roster format and switch to the roster tab.
+  // DEF players are skipped since the rest of the app only handles offensive positions + K.
+  const handleClaimRoster = (sleeperPlayers) => {
+    const newRoster = sleeperPlayers
+      .filter(p => ["QB", "RB", "WR", "TE", "K"].includes(p.position))
+      .map(p => defaultPlayer(p.name, p.position));
+    setRoster(newRoster);
+    setSelected(newRoster[0] || defaultPlayer("", "QB"));
+    setTab("roster");
   };
 
   if (!started) return <WelcomePage onStart={() => setStarted(true)} />;
@@ -480,7 +725,7 @@ export default function App() {
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 6, cursor: "pointer", marginBottom: 4, background: dropTarget?.name === p.name ? "#1a3a28" : "transparent", border: `1px solid ${dropTarget?.name === p.name ? C.accent : "transparent"}`, transition: "all 0.15s" }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 3, padding: "2px 7px", fontSize: 11, color: C.accent, minWidth: 28, textAlign: "center" }}>{p.pos}</div>
                   <div style={{ flex: 1, fontSize: 13, color: C.t2 }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: C.amber }}>{p.proj ?? "—"} pts</div>
+                  <div style={{ fontSize: 12, color: C.amber }}>{p.proj ?? "-"} pts</div>
                   {dropTarget?.name === p.name && <div style={{ fontSize: 11, color: C.red, fontWeight: 600 }}>Drop</div>}
                 </div>
               ))}
@@ -505,7 +750,7 @@ export default function App() {
         </div>}
         {isMobile && <div className="blitz-font" style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: C.accent }}>BLITZ</div>}
         <div style={{ marginLeft: "auto", display: "flex", gap: isMobile ? 4 : 8 }}>
-          {["roster", "players", "lineup", "chat"].map(t => (
+          {["roster", "players", "lineup", "league", "chat"].map(t => (
             <button key={t} onClick={() => { setTab(t); setShowDetail(false); }} className="blitz-font" style={{ background: tab === t ? C.accent : "transparent", border: `1px solid ${tab === t ? C.accent : C.border}`, color: tab === t ? "#fff" : C.t3, padding: isMobile ? "6px 10px" : "6px 16px", borderRadius: 4, cursor: "pointer", fontSize: isMobile ? 10 : 11, letterSpacing: 1, textTransform: "uppercase", transition: "all 0.15s" }}>
               {t}
             </button>
@@ -518,7 +763,7 @@ export default function App() {
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", height: "calc(100dvh - 57px)", overflow: "hidden" }}>
           <div style={{ borderRight: `1px solid ${C.border}`, overflowY: "auto", background: C.surface, display: isMobile && showDetail ? "none" : "block" }}>
             <div style={{ padding: "12px 16px", fontSize: 11, letterSpacing: 2, color: C.t3, borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", textTransform: "uppercase" }}>
-              <span>Roster — {roster.length} Players</span>
+              <span>Roster - {roster.length} Players</span>
               <button onClick={() => setTab("players")} style={{ background: C.accent, border: "none", color: "#fff", padding: "4px 10px", borderRadius: 3, cursor: "pointer", fontSize: 11, fontFamily: "inherit", letterSpacing: 1 }}>+ Add</button>
             </div>
             {roster.map(p => (
@@ -639,7 +884,7 @@ export default function App() {
       {/* ── WAIVER WIRE TAB ── */}
       {tab === "players" && (
         <div style={{ padding: isMobile ? 14 : 28, maxWidth: 800, margin: "0 auto", overflowY: "auto", height: "calc(100dvh - 57px)" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Players — Search & Add</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, color: C.t3, marginBottom: 20, textTransform: "uppercase" }}>Players - Search & Add</div>
           <div style={{ position: "relative", marginBottom: 24 }}>
             <div style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", lineHeight: 0 }}><SearchIcon size={16} color={C.t3} /></div>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -779,10 +1024,10 @@ export default function App() {
                           <div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>{player.pos}</div>
                         </div>
                         <div style={{ fontSize: 12, color: player.trend >= 0 ? C.green : C.red, marginRight: 8 }}>{player.trend >= 0 ? "▲" : "▼"} {Math.abs(player.trend)}</div>
-                        <div className="blitz-font" style={{ fontSize: 20, fontWeight: 700, color: C.accent, minWidth: 36, textAlign: "right" }}>{player.proj ?? "—"}</div>
+                        <div className="blitz-font" style={{ fontSize: 20, fontWeight: 700, color: C.accent, minWidth: 36, textAlign: "right" }}>{player.proj ?? "-"}</div>
                       </>
                     ) : (
-                      <div style={{ flex: 1, fontSize: 13, color: C.t3 }}>Empty — add a {slot.replace(/\d/g, "").trim()} to your roster</div>
+                      <div style={{ flex: 1, fontSize: 13, color: C.t3 }}>Empty - add a {slot.replace(/\d/g, "").trim()} to your roster</div>
                     )}
                   </div>
                 ))}
@@ -799,7 +1044,7 @@ export default function App() {
                       <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 20px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, marginBottom: 6 }}>
                         <div style={{ width: 52, fontSize: 11, color: C.t3, letterSpacing: 1 }}>{p.pos}</div>
                         <div style={{ flex: 1, fontSize: 13, color: C.t2 }}>{p.name}</div>
-                        <div className="blitz-font" style={{ fontSize: 16, fontWeight: 600, color: C.t3 }}>{p.proj ?? "—"}</div>
+                        <div className="blitz-font" style={{ fontSize: 16, fontWeight: 600, color: C.t3 }}>{p.proj ?? "-"}</div>
                       </div>
                     ))}
                   </>
@@ -809,6 +1054,9 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* ── LEAGUE TAB ── */}
+      {tab === "league" && <LeagueTab isMobile={isMobile} onClaimRoster={handleClaimRoster} />}
 
       {/* ── CHAT TAB ── */}
       {tab === "chat" && (
@@ -849,6 +1097,12 @@ export default function App() {
             <div ref={chatBottomRef} />
           </div>
           <div style={{ borderTop: `1px solid ${C.border}`, padding: isMobile ? "10px 12px" : 16, display: "flex", gap: 10, background: C.bg }}>
+            <button
+              onClick={() => { setMessages([{ role: "ai", text: "What do you need? I can break down a trade, check a player's projection, or tell you who to start." }]); apiHistoryRef.current = []; }}
+              disabled={loading}
+              style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 14px", color: C.t3, fontSize: 12, fontFamily: "inherit", cursor: loading ? "not-allowed" : "pointer", flexShrink: 0, opacity: loading ? 0.4 : 1, transition: "opacity 0.2s", whiteSpace: "nowrap" }}>
+              Clear Chat
+            </button>
             <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !loading && sendMessage()}
               placeholder="Ask about a player, trade, or lineup..."
               disabled={loading}

@@ -17,34 +17,35 @@ from ml.model import (
 )
 
 print("Loading NFL data...")
+# Loads one row per player per game week - every stat column (yards, TDs, targets, etc.)
 _weekly = nfl.load_player_stats([2022, 2023, 2024, 2025]).to_pandas()
-_weekly["player_display_name"] = _weekly["player_display_name"].str.lower()
+_weekly["player_display_name"] = _weekly["player_display_name"].str.lower()  # normalize for consistent matching
 print(f"Loaded {len(_weekly)} rows of NFL stats.")
 
 _all_player_names: list[str] = []  # populated after load, used by fuzzy resolver
 
 def _norm(s: str) -> str:
-    """Strip dots and collapse whitespace for name comparison (handles J.J. vs JJ)."""
-    return re.sub(r"[.\s]+", "", s.lower())
+    """Strips dots, apostrophes, and spaces so 'J.J. McCarthy' and \"Ka'imi Fairbairn\" normalize consistently."""
+    return re.sub(r"[.'\s]+", "", s.lower())
 
 def _resolve_player_name(raw: str) -> str:
     """
-    Resolve a potentially misspelled or abbreviated name to the best match in the dataset.
-    Strategy: 1) direct substring  2) dot-stripped normalization  3) difflib fuzzy match
+    Tries 3 strategies in order to find the right player name:
+    1. Exact substring - fastest, handles most cases
+    2. Dot-stripped normalization - handles 'J.J. McCarthy' vs 'jj mccarthy'
+    3. Difflib fuzzy match - handles typos like 'Ceedee' vs 'CeeDee'
     """
     name = raw.lower().strip()
 
-    # 1. Fast path: direct substring match already works
     if not _weekly[_weekly["player_display_name"].str.contains(name, na=False, regex=False)].empty:
         return name
 
-    # 2. Normalize: strip dots/spaces so "jj mccarthy" matches "j.j. mccarthy"
     norm_input = _norm(name)
     for player_name in _all_player_names:
         if _norm(player_name) == norm_input:
             return player_name
 
-    # 3. Difflib: catch typos with >60% similarity
+    # cutoff=0.6 means at least 60% of characters must match - prevents false positives
     matches = difflib.get_close_matches(name, _all_player_names, n=1, cutoff=0.6)
     if matches:
         return matches[0]
@@ -142,7 +143,7 @@ try:
         (c for c in ["player_name", "full_name", "display_name"] if c in _roster_raw.columns), None
     )
     if _roster_name_col:
-        # Keep only players with an active status (or no status column — just being on a 2025 roster is enough)
+        # Keep only players with an active status (or no status column - just being on a 2025 roster is enough)
         if "status" in _roster_raw.columns:
             _active = _roster_raw[_roster_raw["status"].isin(["Active", "ACT", "active"])]
         else:
@@ -166,7 +167,7 @@ def _is_active(player_name: str) -> bool:
 
 
 def _get_kicker_stats(player_name: str) -> dict:
-    """Rolling-average projection for kickers (no ML — variance too high)."""
+    """Rolling-average projection for kickers (no ML - variance too high)."""
     if _kicking.empty:
         return {"found": False, "player": player_name}
     name = player_name.lower().strip()
@@ -263,7 +264,7 @@ def _get_depth_info(player_name: str) -> dict:
     role = "starter" if order == 1 else ("backup" if order == 2 else f"#{order}")
     return {
         "depth_order": order,
-        "depth_label": f"{pos}{order} — {role}",
+        "depth_label": f"{pos}{order} - {role}",
     }
 
 
@@ -290,7 +291,7 @@ def get_player_stats(player_name: str) -> dict:
 
     position  = str(all_games["position"].iloc[-1])  if "position"  in all_games.columns else "?"
 
-    # Kickers are in _weekly but have no ML model — use PBP-based projection
+    # Kickers are in _weekly but have no ML model - use PBP-based projection
     if position == "K":
         return _get_kicker_stats(player_name)
     team      = str(all_games["team"].iloc[-1])       if "team"      in all_games.columns else "?"
@@ -357,7 +358,7 @@ def get_player_stats(player_name: str) -> dict:
 
     if "opponent_team" in recent.columns and not recent.empty:
         opponents   = ", ".join([f"Wk{int(r['week'])} vs {r['opponent_team']}" for _, r in recent.iterrows()])
-        sample_desc = f"{latest_season} — {opponents}"
+        sample_desc = f"{latest_season} - {opponents}"
     else:
         sample_desc = f"Wks {int(recent['week'].min())}–{int(recent['week'].max())}, {latest_season}"
 
@@ -391,7 +392,7 @@ def get_player_stats(player_name: str) -> dict:
 
 def search_players(query: str, limit: int = 12) -> list[dict]:
     """Search for players by partial name match with fuzzy fallback."""
-    q       = _resolve_player_name(query)
+    q = _resolve_player_name(query)
     matches = _weekly[
         _weekly["player_display_name"].str.contains(q, na=False, regex=False) &
         _weekly["position"].isin(FANTASY_POSITIONS)

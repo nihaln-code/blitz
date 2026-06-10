@@ -1,5 +1,5 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi==0.135.1            # HTTP server framework — defines all /api/* routes
+fastapi==0.135.1            # HTTP server framework - defines all /api/* routes
 uvicorn==0.41.0             # ASGI server that runs FastAPI on port 7860
 starlette==0.52.1           # base ASGI toolkit FastAPI is built on; handles middleware/static files
 slowapi==0.1.9              # per-IP rate limiting on API endpoints (protects OpenAI quota)
@@ -8,7 +8,7 @@ pydantic-settings==2.13.1   # loads Settings from .env file (OPENAI_API_KEY, NEW
 pydantic_core==2.41.5       # compiled Rust core that powers pydantic validation
 
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
-openai==2.26.0              # OpenAI SDK — GPT-4o calls in /api/chat and /api/news AI signal
+openai==2.26.0              # OpenAI SDK - GPT-4o calls in /api/chat and /api/news AI signal
 langchain==1.2.10           # LLM orchestration framework used to build the fantasy agent
 langchain-core==1.2.17      # core abstractions: tools, messages, runnables used by the agent
 langchain-openai==1.1.10    # connects LangChain to OpenAI (ChatOpenAI class in fantasy_agent.py)
@@ -17,14 +17,14 @@ langgraph-checkpoint==4.0.1 # saves/restores agent state between steps in the gr
 langgraph-prebuilt==1.0.8   # provides create_react_agent() used in fantasy_agent.py
 langgraph-sdk==0.3.9        # LangGraph runtime client (internal dep of langgraph)
 langsmith==0.7.14           # LangChain tracing and observability (auto-enabled if key is set)
-tiktoken==0.12.0            # OpenAI tokenizer — counts tokens for context window management
+tiktoken==0.12.0            # OpenAI tokenizer - counts tokens for context window management
 
 # ── ML / Data ─────────────────────────────────────────────────────────────────
 xgboost==3.2.0              # trains and runs the 4 position projection models (QB/RB/WR/TE)
-shap==0.51.0                # explains XGBoost predictions — produces the top-5 factor breakdown
+shap==0.51.0                # explains XGBoost predictions - produces the top-5 factor breakdown
 scikit-learn==1.8.0         # mean_absolute_error for model validation during training
 numpy==2.4.2                # array math used throughout ml/model.py and data/stats.py
-pandas==3.0.1               # core DataFrame library — all NFL stat loading and feature engineering
+pandas==3.0.1               # core DataFrame library - all NFL stat loading and feature engineering
 scipy==1.17.1               # used by XGBoost quantile models for floor/ceiling projections
 pyarrow==23.0.1             # reads/writes parquet files; pandas uses it to load NFL data
 

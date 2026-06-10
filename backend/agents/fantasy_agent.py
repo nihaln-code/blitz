@@ -13,6 +13,8 @@ settings = get_settings()
 
 # ─────────────────────────────────────────────
 # Tools
+# Each function decorated with @tool becomes something the LLM can call by name.
+# The docstring is literally what the LLM reads to decide when to use the tool.
 # ─────────────────────────────────────────────
 
 @tool
@@ -78,7 +80,7 @@ def analyze_trade(giving_players: str, receiving_players: str) -> str:
         if not stats["found"]:
             return f"  {name}: not found", 0.0, "?"
         line = (
-            f"  {stats['player']} ({stats['position']}, {stats['team']}) — "
+            f"  {stats['player']} ({stats['position']}, {stats['team']}) - "
             f"{stats['projected_points']} pts/wk | "
             f"Floor {stats['floor']} / Ceiling {stats['ceiling']} | "
             f"Confidence: {stats['confidence']}"
@@ -116,11 +118,45 @@ Positions arriving:       {', '.join(receiving_pos)}
 """
 
 @tool
+def get_sleeper_rosters(league_id: str) -> str:
+    """
+    Fetch all team rosters from a Sleeper fantasy football league.
+    Use this when the user provides a Sleeper league ID, asks who owns a specific player,
+    wants trade targets from their actual league, or needs to know what players are available.
+    The league_id is the long numeric string visible in the Sleeper app URL.
+    """
+    from data.sleeper import get_league_rosters
+
+    try:
+        data = get_league_rosters(league_id)
+    except Exception as e:
+        return f"Could not fetch Sleeper league {league_id}: {e}. Make sure the ID is correct."
+
+    lines = [f"📋 {data['league_name']} ({data['season']}) - {len(data['teams'])} Teams\n"]
+
+    for team in data["teams"]:
+        # Show the team name and @username on the same header line
+        header = team["team_name"]
+        if team["display_name"] and team["display_name"] != team["team_name"]:
+            header += f" (@{team['display_name']})"
+        lines.append(f"\n🏈 {header}")
+
+        for p in team["players"]:
+            # ★ marks starters so the AI knows who's in the active lineup this week
+            marker = "★" if p["is_starter"] else " "
+            lines.append(f"  {marker} {p['position']:<4} {p['name']} ({p['team']})")
+
+    lines.append("\n(★ = currently in active Sleeper lineup)")
+    return "\n".join(lines)
+
+
+@tool
 def optimize_lineup(roster: str, week: int) -> str:
     """
     Suggest an optimal lineup. Pass roster as a comma-separated string
     e.g. 'Josh Allen, CeeDee Lamb, Travis Kelce'.
     """
+    # Placeholder - real optimization (using PuLP integer programming) not implemented yet
     players = [p.strip() for p in roster.split(",")]
     return f"""
 🏈 Lineup Suggestion - Week {week}
@@ -134,18 +170,25 @@ Connect ml/performance_model.py and tools/roster_optimizer.py for real LP-optimi
 # Build the Agent
 # ─────────────────────────────────────────────
 
+# This is what the LLM reads at the start of every conversation.
+# It defines the AI's personality, rules, and how to handle edge cases.
 SYSTEM_PROMPT = """You are a sharp, opinionated fantasy football analyst. You give strong, \
-data-backed verdicts — not hedged non-answers.
+data-backed verdicts - not hedged non-answers.
 
 RULES:
 1. Always pull real projection data before advising on any player or trade.
 2. For trades: end with a clear "MAKE THIS TRADE" or "DO NOT MAKE THIS TRADE" verdict.
 3. Factor in positional scarcity. Losing a starting QB when the backup is unproven is almost \
-always a losing move — call it out explicitly.
+always a losing move - call it out explicitly.
 4. If the numbers show a trade is lopsided, say so directly. Do not soften it.
-5. Never say "consider whether..." — give a direct answer with the reasoning behind it.
+5. Never say "consider whether..." - give a direct answer with the reasoning behind it.
 6. Account for roster context the user provides (backup players, positional depth, team needs).
 7. Back every verdict with specific projected points from the tools.
+
+SLEEPER LEAGUE INTEGRATION:
+- If the user's message includes a Sleeper league ID, call get_sleeper_rosters with it first.
+- Use the roster data to identify trade targets, waiver wire pickups, or lineup decisions.
+- When analyzing trades, reference who owns the players involved and their roster context.
 
 PLAYER NAME HANDLING:
 - If a name lookup fails, retry with common variations: drop punctuation, try last name only, \
@@ -155,7 +198,7 @@ try first name only. Do not give up after one failed lookup."""
 def build_fantasy_agent():
     llm = ChatOpenAI(
         model=settings.openai_model,
-        temperature=0,
+        temperature=0,          # 0 = deterministic; no creativity, just facts
         api_key=settings.openai_api_key,
     )
 
@@ -164,8 +207,10 @@ def build_fantasy_agent():
         research_player_news,
         analyze_trade,
         optimize_lineup,
+        get_sleeper_rosters,   # fetch real league rosters by Sleeper league ID
     ]
 
+    # create_react_agent implements the ReAct loop: Reason → call a Tool → Observe result → repeat
     agent = create_react_agent(
         model=llm,
         tools=tools,
@@ -182,6 +227,7 @@ def run_agent(agent, user_input: str, chat_history: list = None) -> str:
     messages.append(HumanMessage(content=user_input))
 
     try:
+        # .invoke() runs the full ReAct loop until the LLM stops calling tools
         result = agent.invoke({"messages": messages})
         return result["messages"][-1].content
     except Exception as e:
